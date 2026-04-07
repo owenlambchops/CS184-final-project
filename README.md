@@ -1,6 +1,7 @@
 # CS184 Project Webpage Repo
 
-Repo for webpages and videos for CS 184 Final Project. Team: Kevin, Yoko, Haoyi, Owen. Ideally we can use this repo to store/view both the milestone and final websites. 
+Repo for webpages and videos for CS 184 Final Project. Team: Kevin, Yoko, Haoyi, Owen. Ideally we can use this repo to store/view both the milestone and final websites. The GitHub pages
+link will display the most updated version of the webpage (this will be index.html in the root directory), but we should save the milestone copy of index.html in the milestone folder (so that /milestone will display the milestone version of the website).
 
 ## Enabling Github Pages
 
