@@ -1,0 +1,8 @@
+title: "Real Time Interactive Water Droplets"
+url: "https://owenlambchops.github.io"
+baseurl: "/CS184-final-project"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  math_engine: null
