@@ -14,7 +14,7 @@ team:
 
 ## Project Summary
 
-We are going to build a real-time interactive water droplet simulator that simulates droplet movement on a vertical glass surface without gravity as the baseline. The system emphasizes realistic visual appearance through real-time refractive shading. Aspirational extensions include physically accurate merging/splitting, caustics, customizable fluid properties like viscosity and friction, and support for more complex surfaces than a flat plane.
+We plan to build a real-time interactive water droplet simulator that simulates droplet movement on a vertical glass surface without gravity as the baseline. The system emphasizes realistic visual appearance through real-time refractive shading. Aspirational extensions include physically accurate merging/splitting, caustics, customizable fluid properties like viscosity and friction, and support for more complex surfaces than a flat plane.
 
 ## Problem Description
 
@@ -71,8 +71,8 @@ Fluid simulation has been quite an active area of research in computer graphics.
 ### 2. Existing Code & Systems
 
 - Initial research into real-time optical effects, environmental reflections, and baseline movement logic is informed by the following existing shader implementations:
-  - ShaderToy Reference 1: Water Droplets Shader ([wlyfWw](https://www.shadertoy.com/view/wlyfWw){:target="_blank"})
-  - ShaderToy Reference 2: Water Droplets Shader ([4ll3R7](https://www.shadertoy.com/view/4ll3R7){:target="_blank"})
+  - ShaderToy Reference 1: Water Droplets Shader ([ShaderToy](https://www.shadertoy.com/view/wlyfWw){:target="_blank"})
+  - ShaderToy Reference 2: Water Droplets Shader ([ShaderToy](https://www.shadertoy.com/view/4ll3R7){:target="_blank"})
 
 ### 3. Reference Materials
 
