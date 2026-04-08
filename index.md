@@ -1,6 +1,7 @@
 ---
 layout: project
 title: "Real Time Interactive Water Droplets"
+date: CS 184 Final Project Proposal, Spring 2026
 team:
   - Haoyi Yu
   - Yoko Furukawa

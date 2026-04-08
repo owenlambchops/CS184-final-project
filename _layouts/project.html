@@ -9,4 +9,10 @@ layout: default
 </div>
 {% endif %}
 
+{% if page.date %}
+<div style="text-align: center; color: #292929; margin-bottom: 2em;">
+  {{ page.date | join: ", " }}
+</div>
+{% endif %}
+
 {{ content }}
