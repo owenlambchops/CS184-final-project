@@ -3,6 +3,13 @@ layout: default
 ---
 
 <h1>{{ page.title }}</h1>
+
+{% if page.date %}
+<div style="text-align: center; color: #292929; margin-bottom: 2em;">
+  {{ page.date | join: ", " }}
+</div>
+{% endif %}
+
 {% if page.team %}
 <div style="text-align: center; color: #555; margin-bottom: 1.5em;">
   {{ page.team | join: ", " }}
