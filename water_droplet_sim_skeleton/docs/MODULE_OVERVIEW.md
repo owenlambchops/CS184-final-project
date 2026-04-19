@@ -43,8 +43,6 @@ docs/
 
 Defines the C++20 project, builds the `wd_core` library, and builds the minimal executable `wd_skeleton`.
 
-It currently requires Eigen. GLFW, glad, ImGui, and libigl should be added after the team starts implementing the interactive renderer.
-
 ---
 
 ## `README.md`
