@@ -1,0 +1,32 @@
+{
+  "name": "water-droplet-simulator-skeleton",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "eigen3",
+    "glfw3",
+    {
+      "name": "glad",
+      "default-features": false,
+      "features": [
+        "gl-api-41"
+      ]
+    },
+    {
+      "name": "imgui",
+      "default-features": false,
+      "features": [
+        "glfw-binding",
+        "opengl3-binding"
+      ]
+    },
+    {
+      "name": "libigl",
+      "default-features": false,
+      "features": [
+        "glfw",
+        "imgui",
+        "opengl"
+      ]
+    }
+  ]
+}

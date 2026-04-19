@@ -1,0 +1,4 @@
+vcpkg/
+.cache
+build
+.vscode

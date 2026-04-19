@@ -24,8 +24,12 @@ Vec3 DragForceField::sample(const Vec3& x, double) const {
     if (dist > radius_) return Vec3::Zero();
 
     double falloff = 1.0 - dist / radius_;
-    Vec3 dir = direction_.norm() > 1e-8 ? direction_.normalized()
-                                        : (dist > 1e-8 ? toCenter / dist : Vec3::Zero());
+    Vec3 dir = Vec3::Zero();
+    if (direction_.norm() > 1e-8) {
+        dir = direction_.normalized();
+    } else if (dist > 1e-8) {
+        dir = toCenter / dist;
+    }
     return strength_ * falloff * falloff * dir;
 }
 

@@ -23,7 +23,9 @@ void MergeSplitController::process(std::vector<std::unique_ptr<Droplet>>& drople
     if (enableSplit) {
         for (size_t i = 0; i < droplets.size(); ++i) {
             if (shouldSplit(*droplets[i])) {
-                auto children = factory_.spawnSplit(nextId_++, nextId_++, *droplets[i], surface, 0.5);
+                int firstId = nextId_++;
+                int secondId = nextId_++;
+                auto children = factory_.spawnSplit(firstId, secondId, *droplets[i], surface, 0.5);
                 droplets.erase(droplets.begin() + static_cast<long>(i));
                 droplets.push_back(std::move(children.first));
                 droplets.push_back(std::move(children.second));

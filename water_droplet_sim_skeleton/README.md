@@ -26,9 +26,29 @@ Minimum stack:
 - Optional: libigl for cotangent Laplacian, mass matrix, and normals
 - Optional: stb_image for height maps and background/environment textures
 
-The current `CMakeLists.txt` only requires Eigen so the CPU simulation core can be built before the renderer is fully implemented.
+## Dependency setup on macOS
+
+For the full renderer/UI stack (`Eigen`, `GLFW`, `glad`, `Dear ImGui`, `libigl`), use the included `vcpkg.json` manifest in this directory.
+
+1. Clone and bootstrap `vcpkg` once:
+
+```bash
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+```
+
+2. Install the project dependencies in manifest mode:
+
+```bash
+cd water_droplet_sim_skeleton
+../vcpkg/vcpkg install
+```
+
+This creates a local `vcpkg_installed/` directory for this project instead of installing libraries system-wide.
 
 ## Build
+
+`CMakeLists.txt` now auto-detects the project's local `vcpkg_installed/<triplet>` directory, so after running `vcpkg install` you can usually build directly:
 
 ```bash
 mkdir build
