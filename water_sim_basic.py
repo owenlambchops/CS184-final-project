@@ -154,7 +154,7 @@ def apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist):
     return x, v
 
 
-def step(
+def step_forward_euler(
     v,
     x,
     faces,
@@ -169,7 +169,7 @@ def step(
     friction_coeff,
     adhesion_dist=0.05,
     density=1.0,
-):  # <--- ADDED DENSITY PARAMETER
+):
     """Advances the simulation by one explicit Euler time step."""
 
     # 1. Update State Geometry
@@ -203,3 +203,24 @@ def step(
     )
 
     return v_new, x_new
+
+
+def step_verlet(
+    x,
+    x_prev,
+    faces,
+    neighbours,
+    V_0,
+    dt,
+    g,
+    gamma,
+    mu,
+    eta,
+    k_v,
+    friction_coeff,
+    adhesion_dist=0.05,
+    density=1.0,
+):
+    # TODO: implement Verlet integration scheme
+    # https://en.wikipedia.org/wiki/Verlet_integration#Velocity_Verlet
+    pass
