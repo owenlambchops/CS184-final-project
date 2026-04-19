@@ -5,7 +5,29 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Prefer the project's local vcpkg installation tree when it exists, so the
+# repo can configure without passing the toolchain file every time.
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+        set(VCPKG_TARGET_TRIPLET arm64-osx CACHE STRING "vcpkg target triplet")
+    elseif(APPLE)
+        set(VCPKG_TARGET_TRIPLET x64-osx CACHE STRING "vcpkg target triplet")
+    endif()
+endif()
+
+if(DEFINED VCPKG_TARGET_TRIPLET)
+    set(WD_LOCAL_VCPKG_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}")
+    if(EXISTS "${WD_LOCAL_VCPKG_PREFIX}")
+        list(PREPEND CMAKE_PREFIX_PATH "${WD_LOCAL_VCPKG_PREFIX}")
+        message(STATUS "Using local vcpkg packages from ${WD_LOCAL_VCPKG_PREFIX}")
+    endif()
+endif()
+
 find_package(Eigen3 REQUIRED)
+find_package(glad CONFIG REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(libigl CONFIG REQUIRED)
 
 add_library(wd_core
     src/core/scene.cpp
@@ -31,7 +53,16 @@ add_library(wd_core
 )
 
 target_include_directories(wd_core PUBLIC include)
-target_link_libraries(wd_core PUBLIC Eigen3::Eigen)
+target_link_libraries(wd_core PUBLIC
+    Eigen3::Eigen
+    glad::glad
+    glfw
+    imgui::imgui
+    igl::igl_core
+    igl::igl_opengl
+    igl::igl_glfw
+    igl::igl_imgui
+)
 
 target_compile_options(wd_core PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>

@@ -35,7 +35,10 @@ void Droplet::updateDerived() {
     }
 
     derived_.centerOfMass = X_.colwise().mean().transpose();
-    derived_.avgVelocity = U_.rows() > 0 ? U_.colwise().mean().transpose() : Vec3::Zero();
+    derived_.avgVelocity = Vec3::Zero();
+    if (U_.rows() > 0) {
+        derived_.avgVelocity = U_.colwise().mean().transpose();
+    }
 
     if (boundaryLoop().size() >= 3) {
         Vec3 center = Vec3::Zero();

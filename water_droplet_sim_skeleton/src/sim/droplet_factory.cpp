@@ -42,9 +42,10 @@ std::pair<std::unique_ptr<Droplet>, std::unique_ptr<Droplet>> DropletFactory::sp
     int id0, int id1, const Droplet& src, const ISurface& surface, double volumeRatio) const {
     volumeRatio = std::clamp(volumeRatio, 0.1, 0.9);
 
-    Vec3 axis = src.derived().principalAxis.norm() > 1e-8
-        ? src.derived().principalAxis.normalized()
-        : Vec3::UnitX();
+    Vec3 axis = Vec3::UnitX();
+    if (src.derived().principalAxis.norm() > 1e-8) {
+        axis = src.derived().principalAxis.normalized();
+    }
     double offset = std::max(0.05, 0.35 * src.derived().footprintRadius);
 
     SpawnDesc a;
