@@ -44,6 +44,29 @@ def L(n, cotangent_weights, neighbours):
     return L_ret
 
 
+def generate_lumped_masses(n, rho, positions, faces):
+    """
+    returns a list (n,1) of lumped masses for each vertex
+    """
+
+    def triangle_area(a, b, c):
+        return 0.5 * np.linalg.norm(np.cross(b - a, c - a))
+
+    masses = np.zeros(n, dtype=np.float32)
+
+    for i in range(n):
+        vertex_mass = 0.0
+        for face in faces:
+            if i in face:
+                a = positions[face[0]]
+                b = positions[face[1]]
+                c = positions[face[2]]
+                vertex_mass += triangle_area(a, b, c) / 3.0
+        masses[i] = rho * vertex_mass
+
+    return masses
+
+
 def M(n, rho, positions, faces):
     """
     Build a lumped mass matrix for a triangular surface mesh.
@@ -61,23 +84,8 @@ def M(n, rho, positions, faces):
     Returns:
         np.ndarray: (n, n) diagonal lumped mass matrix.
     """
-
-    def triangle_area(a, b, c):
-        return 0.5 * np.linalg.norm(np.cross(b - a, c - a))
-
-    mass_matrix = np.zeros((n, n), dtype=np.float32)
-
-    for i in range(n):
-        vertex_mass = 0.0
-        for face in faces:
-            if i in face:
-                a = positions[face[0]]
-                b = positions[face[1]]
-                c = positions[face[2]]
-                vertex_mass += triangle_area(a, b, c) / 3.0
-        mass_matrix[i, i] = rho * vertex_mass
-
-    return mass_matrix
+    masses = generate_lumped_masses(n, rho, positions, faces)
+    return np.diag(masses)
 
 
 def generate_points_on_sphere(n=100, r=1.0):
@@ -246,7 +254,9 @@ def apply_surface_tension(
     vertex_masses = np.diag(mass_matrix)
     vertex_masses = np.where(vertex_masses > 1e-12, vertex_masses, 1.0)
 
-    curvature = (np.linalg.inv(mass_matrix) @ L(n, cotangent_weights, neighbours)) @ positions
+    curvature = (
+        np.linalg.inv(mass_matrix) @ L(n, cotangent_weights, neighbours)
+    ) @ positions
     normals = compute_vertex_normals(positions, faces)
 
     curvature_normal = np.sum(curvature * normals, axis=1)
@@ -343,52 +353,117 @@ def compute_vertex_normals(positions, faces):
     return normals / norms
 
 
-def apply_volume_correction(
-    positions, faces, target_volume, stiffness=0.15, tolerance=0.05
+def apply_local_volume_correction(positions, velocities, faces, rho):
+    n = positions.shape[0]
+    # find the mass-weighted COM rigid velocities
+    # linear velocity
+    vertex_masses = generate_lumped_masses(n, rho, positions, faces)
+    total_mass = np.sum(vertex_masses)
+    v_cm = np.sum(vertex_masses[:, None] * velocities, axis=0) / max(total_mass, 1e-12)
+    # angular velocity
+    x_m = np.mean(positions, axis=0)
+    rel = positions - x_m
+    inertia = np.zeros((3, 3))
+    for i in range(n):
+        r = rel[i]
+        m = vertex_masses[i]
+        inertia += m * (np.dot(r, r) * np.eye(3) - np.outer(r, r))
+    ang_momentum = np.sum(
+        [np.cross(rel[i], vertex_masses[i] * velocities[i]) for i in range(n)], axis=0
+    )
+    w_cm = np.linalg.pinv(inertia) @ ang_momentum
+    # rigid velocity for every vertex
+    v_rigid = np.zeros_like(positions)
+    for i in range(n):
+        v_rigid[i] = v_cm + np.cross(w_cm, positions[i] - x_m)
+    # extract deformation velocities from each vertex
+    v_deform = velocities - v_rigid
+
+    # Compute area-weighted vertex normals
+    normals = compute_vertex_normals(positions, faces)
+
+    # Lumped area (mass/rho) for each vertex
+    lumped_areas = vertex_masses / rho
+
+    # ai = ui · ni (deformation velocity projected onto normal)
+    a_i = np.sum(v_deform * normals, axis=1)
+
+    # For each vertex, compute local average of ai over its neighborhood (including itself)
+    # Build vertex neighbors from faces
+    n = positions.shape[0]
+    neighbors = {i: set() for i in range(n)}
+    for face in faces:
+        for k in range(3):
+            i = face[k]
+            j = face[(k + 1) % 3]
+            neighbors[i].add(j)
+            neighbors[j].add(i)
+    neighbors = {i: list(nbs) + [i] for i, nbs in neighbors.items()}  # include self
+
+    a_bar = np.zeros(n)
+    for i in range(n):
+        area_sum = 0.0
+        weighted_sum = 0.0
+        for j in neighbors[i]:
+            area = lumped_areas[j]
+            weighted_sum += area * a_i[j]
+            area_sum += area
+        a_bar[i] = weighted_sum / area_sum if area_sum > 0 else 0.0
+
+    # Subtract a_bar * n_i from v_deform
+    v_deform_corr = v_deform - (a_bar[:, None] * normals)
+
+    # Optionally, apply global volume correction (uncomment if needed)
+    # current_volume = compute_closed_volume(positions, faces)
+    # initial_volume = ... # You must provide this value externally if you want global correction
+    # delta_V = current_volume - initial_volume
+    # total_area = np.sum(lumped_areas)
+    # d = delta_V / total_area if total_area > 0 else 0.0
+    # v_deform_corr = v_deform_corr + d * normals
+
+    # Add rigid velocity back
+    velocities_corrected = v_deform_corr + v_rigid
+    return velocities_corrected
+
+
+def apply_global_volume_correction(
+    positions, velocities, faces, target_volume, dt, volume_stiffness=1.0
 ):
     """
-    Push the surface along outward normals to correct drift in enclosed volume.
-
-    This keeps the droplet rounder than a pure rescale because the update acts
-    locally on the surface normal instead of shrinking or expanding the mesh
-    isotropically about its centroid.
+    Global volume correction using uniform normal offset d = ΔV / A.
 
     Args:
-        positions (np.ndarray): (n, 3) array of vertex positions.
-        faces (np.ndarray): (f, 3) array of triangle indices.
+        positions (np.ndarray): (n, 3) vertex positions.
+        velocities (np.ndarray): (n, 3) vertex velocities.
+        faces (np.ndarray): (f, 3) triangle indices.
         target_volume (float): Desired enclosed volume.
-        stiffness (float): Blend factor in [0, 1] controlling correction strength.
+        dt (float): Time step.
+        volume_stiffness (float): [0, 1] blend factor for correction strength.
 
     Returns:
-        np.ndarray: Corrected positions array.
+        tuple[np.ndarray, np.ndarray]: Corrected positions and velocities.
     """
-
-    if target_volume <= 1e-12:
-        return positions
+    if target_volume is None:
+        return positions, velocities
 
     current_volume = compute_closed_volume(positions, faces)
-    if current_volume <= 1e-12:
-        return positions
-
-    relative_error = abs(current_volume - target_volume) / target_volume
-    if relative_error < tolerance:
-        return positions
-
-    surface_area = 0.0
-    for i0, i1, i2 in faces:
-        a = positions[i0]
-        b = positions[i1]
-        c = positions[i2]
-        surface_area += 0.5 * np.linalg.norm(np.cross(b - a, c - a))
-
-    if surface_area <= 1e-12:
-        return positions
-
-    normal_step = stiffness * (target_volume - current_volume) / surface_area
-    normal_step = np.clip(normal_step, -0.03, 0.03)
+    delta_v = target_volume - current_volume
+    if abs(delta_v) < 1e-12:
+        return positions, velocities
 
     normals = compute_vertex_normals(positions, faces)
-    return positions + normal_step * normals
+    # With rho=1, lumped masses are equivalent to lumped surface areas.
+    lumped_areas = generate_lumped_masses(positions.shape[0], 1.0, positions, faces)
+    total_area = np.sum(lumped_areas)
+    if total_area <= 1e-12:
+        return positions, velocities
+
+    stiffness = np.clip(volume_stiffness, 0.0, 1.0)
+    d = stiffness * (delta_v / total_area)
+
+    corrected_positions = positions + d * normals
+    corrected_velocities = velocities + (d / max(dt, 1e-12)) * normals
+    return corrected_positions, corrected_velocities
 
 
 def step(
@@ -432,14 +507,17 @@ def step(
     )
 
     # Volume preservation
+    new_velocities = apply_local_volume_correction(
+        new_positions, new_velocities, faces, rho=1.0
+    )
     if target_volume is not None:
-        corrected_positions = apply_volume_correction(
+        new_positions, new_velocities = apply_global_volume_correction(
             new_positions,
+            new_velocities,
             faces,
             target_volume,
-            stiffness=volume_stiffness,
+            dt,
+            volume_stiffness=volume_stiffness,
         )
-        new_velocities = (corrected_positions - new_positions) / dt + new_velocities
-        new_positions = corrected_positions
 
     return new_positions, new_velocities
