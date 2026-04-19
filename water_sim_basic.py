@@ -154,6 +154,47 @@ def apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist):
     return x, v
 
 
+def boundary_force(
+    alpha,
+    n_l,
+    contact_mask,
+    receding_angle,
+    advancing_angle,
+    ground_normal=np.array([0.0, 0.0, 1.0], dtype=np.float32),
+):
+    """Computes per-vertex contact-angle hysteresis boundary force in radians."""
+    if receding_angle > advancing_angle:
+        raise ValueError("receding_angle must be <= advancing_angle")
+
+    f_boundary = np.zeros_like(n_l)
+    if np.count_nonzero(contact_mask) == 0:
+        return f_boundary
+
+    n_i = normalise(ground_normal.astype(n_l.dtype, copy=False))
+    contact_ids = np.where(contact_mask)[0]
+
+    for i in contact_ids:
+        n_li = n_l[i]
+        dot_val = np.clip(np.dot(n_li, n_i), -1.0, 1.0)
+        angle = np.arccos(dot_val)
+
+        # Project liquid surface normal onto the ground plane.
+        n_p = n_li - dot_val * n_i
+        n_p_dir = normalise(n_p)
+
+        if np.linalg.norm(n_p_dir) == 0:
+            continue
+
+        if receding_angle < angle < advancing_angle:
+            continue  # no boundary force in the hysteresis range
+        if angle <= receding_angle:
+            f_boundary[i] = alpha * (angle - receding_angle) * n_p_dir
+        else:  # angle >= advancing_angle
+            f_boundary[i] = alpha * (angle - advancing_angle) * n_p_dir
+
+    return f_boundary
+
+
 def step_forward_euler(
     v,
     x,
@@ -167,6 +208,9 @@ def step_forward_euler(
     eta,
     k_v,
     friction_coeff,
+    boundary_alpha=0.5,
+    receding_angle=np.deg2rad(70.0),
+    advancing_angle=np.deg2rad(95.0),
     adhesion_dist=0.05,
     density=1.0,
 ):
@@ -180,12 +224,20 @@ def step_forward_euler(
     # 2. Accumulate Forces
     f_st = gamma * delta_x  # Surface Tension Force
     f_vol = k_v * (V_0 - V) * n  # Volume Pressure Force
+    contact_mask = x[:, 2] <= adhesion_dist
+    f_boundary = boundary_force(
+        boundary_alpha,
+        n,
+        contact_mask,
+        receding_angle,
+        advancing_angle,
+    )
 
     # 3. Apply Density (Newton's Second Law: a = F / m)
     # Gravity is an acceleration, so it is independent of mass.
     # Internal forces are divided by the mass/density of the vertices.
     a_ext = np.broadcast_to(g, x.shape)
-    a_internal = (f_st + f_vol) / density
+    a_internal = (f_st + f_vol + f_boundary) / density
 
     a_total = a_ext + a_internal
 
@@ -223,4 +275,5 @@ def step_verlet(
 ):
     # TODO: implement Verlet integration scheme
     # https://en.wikipedia.org/wiki/Verlet_integration#Velocity_Verlet
-    pass
+    
+    
