@@ -67,9 +67,11 @@ struct SolverParams {
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
     bool enableContactAngle = true;
-    bool enableVolumeCorrect = true;
+    bool enableVolumeCorrect = false;
 
     double collisionPushoutEps = 1e-4;
+    double adhesionDistance = 0.05;
+    double maxVelocity = 15.0;
 };
 
 struct RenderParams {

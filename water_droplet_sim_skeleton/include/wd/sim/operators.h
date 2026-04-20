@@ -12,7 +12,7 @@ public:
 
 class CollisionProjector {
 public:
-    void apply(Droplet& drop, const ISurface& surface, double pushoutEps) const;
+    void apply(Droplet& drop, const ISurface& surface, double pushoutEps, double adhesionDist, double dt) const;
 };
 
 class ViscosityOperator {
@@ -22,12 +22,12 @@ public:
 
 class CurvatureFlowOperator {
 public:
-    void apply(Droplet& drop, double dt) const;
+    void apply(Droplet& drop, const ISurface& surface, double dt) const;
 };
 
 class ContactLineOperator {
 public:
-    void apply(Droplet& drop, const ISurface& surface, double dt) const;
+    void apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const;
 };
 
 class VolumeCorrector {
