@@ -34,7 +34,7 @@ std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalCap(
     for (int s = 0; s < segmentCount; ++s) {
         int a = 1 + s;
         int b = 1 + ((s + 1) % segmentCount);
-        tpl->F_.row(f++) = Eigen::RowVector3i(0, a, b);
+        tpl->F_.row(f++) = Eigen::RowVector3i(0, b, a);
     }
 
     for (int r = 1; r < ringCount; ++r) {
@@ -45,8 +45,8 @@ std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalCap(
             int c1 = curr + ((s + 1) % segmentCount);
             int n0 = next + s;
             int n1 = next + ((s + 1) % segmentCount);
-            tpl->F_.row(f++) = Eigen::RowVector3i(c0, n0, n1);
-            tpl->F_.row(f++) = Eigen::RowVector3i(c0, n1, c1);
+            tpl->F_.row(f++) = Eigen::RowVector3i(c0, n1, n0);
+            tpl->F_.row(f++) = Eigen::RowVector3i(c0, c1, n1);
         }
     }
 
