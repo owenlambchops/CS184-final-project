@@ -273,6 +273,7 @@ def step_verlet(
     adhesion_dist=0.05,
     density=1.0,
 ):
+    pass
     # TODO: implement Verlet integration scheme
     # https://en.wikipedia.org/wiki/Verlet_integration#Velocity_Verlet
     
