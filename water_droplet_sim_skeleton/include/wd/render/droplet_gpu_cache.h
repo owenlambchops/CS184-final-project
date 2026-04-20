@@ -9,6 +9,7 @@ class DropletGpuCache {
 public:
     void sync(const std::vector<std::unique_ptr<Droplet>>& droplets);
     void drawDroplet(int dropletId) const;
+    void clear() { buffers_.clear(); }
 
 private:
     std::unordered_map<int, GpuMeshBuffer> buffers_;

@@ -4,6 +4,7 @@
   "dependencies": [
     "eigen3",
     "glfw3",
+    "glm",
     {
       "name": "glad",
       "default-features": false,

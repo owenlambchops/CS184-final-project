@@ -26,6 +26,7 @@ endif()
 find_package(Eigen3 REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(libigl CONFIG REQUIRED)
 
@@ -57,6 +58,7 @@ target_link_libraries(wd_core PUBLIC
     Eigen3::Eigen
     glad::glad
     glfw
+    glm::glm
     imgui::imgui
     igl::igl_core
     igl::igl_opengl
@@ -71,3 +73,5 @@ target_compile_options(wd_core PRIVATE
 
 add_executable(wd_skeleton src/main.cpp)
 target_link_libraries(wd_skeleton PRIVATE wd_core)
+
+file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
