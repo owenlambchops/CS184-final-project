@@ -3,119 +3,11 @@
 #include "wd/sim/droplet_template.h"
 #include "wd/surface/plane_surface.h"
 
-#include <array>
-#include <chrono>
-#include <filesystem>
-#include <fstream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
-#include <sstream>
-#include <string>
 
 namespace wd {
-
-namespace {
-
-glm::vec3 toGlm(const Vec3& v) {
-    return glm::vec3(static_cast<float>(v.x()),
-                     static_cast<float>(v.y()),
-                     static_cast<float>(v.z()));
-}
-
-std::string loadTextFile(const std::filesystem::path& path) {
-    std::ifstream file(path);
-    if (!file) {
-        std::cerr << "Failed to open shader file: " << std::filesystem::absolute(path)
-                  << " (cwd: " << std::filesystem::current_path() << ")\n";
-        return {};
-    }
-
-    std::ostringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
-
-unsigned int compileShader(unsigned int type, const std::filesystem::path& path) {
-    const std::string source = loadTextFile(path);
-    if (source.empty()) return 0;
-
-    const char* sourcePtr = source.c_str();
-    const unsigned int shader = glCreateShader(type);
-    glShaderSource(shader, 1, &sourcePtr, nullptr);
-    glCompileShader(shader);
-
-    int success = GL_FALSE;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (success == GL_TRUE) return shader;
-
-    int logLength = 0;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-    std::string log(std::max(logLength, 1), '\0');
-    glGetShaderInfoLog(shader, logLength, nullptr, log.data());
-    std::cerr << "Shader compile failed: " << path << "\n" << log << "\n";
-    glDeleteShader(shader);
-    return 0;
-}
-
-unsigned int createShaderProgram(
-    const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath) {
-    const unsigned int vertexShader = compileShader(GL_VERTEX_SHADER, vertexPath);
-    if (vertexShader == 0) return 0;
-
-    const unsigned int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentPath);
-    if (fragmentShader == 0) {
-        glDeleteShader(vertexShader);
-        return 0;
-    }
-
-    const unsigned int program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    int success = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (success == GL_TRUE) return program;
-
-    int logLength = 0;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-    std::string log(std::max(logLength, 1), '\0');
-    glGetProgramInfoLog(program, logLength, nullptr, log.data());
-    std::cerr << "Program link failed: " << vertexPath << " + " << fragmentPath << "\n"
-              << log << "\n";
-    glDeleteProgram(program);
-    return 0;
-}
-
-constexpr std::array<float, 24> kPlaneVertices = {
-    -3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-    -3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-};
-
-constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
-
-const glm::vec3 kLightDir = glm::normalize(glm::vec3(0.4f, 0.8f, 0.2f));
-
-void setMat4(unsigned int program, const char* name, const glm::mat4& value) {
-    const int location = glGetUniformLocation(program, name);
-    if (location >= 0) glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
-}
-
-void setVec3(unsigned int program, const char* name, const glm::vec3& value) {
-    const int location = glGetUniformLocation(program, name);
-    if (location >= 0) glUniform3fv(location, 1, glm::value_ptr(value));
-}
-
-} // namespace
 
 int App::run() {
     if (!initializeWindow()) return 1;
@@ -181,16 +73,15 @@ bool App::initialize() {
     camera_.setPosition(Vec3(2.2, 1.35, 2.2));
 
     renderer_ = std::make_unique<RefractiveRenderer>();
-    renderer_->initialize(width_, height_);
+    if (!renderer_->initialize(width_, height_)) {
+        std::cerr << "Failed to initialize renderer.\n";
+        return false;
+    }
+
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
-
-    if (!initializeRenderResources()) {
-        std::cerr << "Failed to initialize milestone render resources.\n";
-        return false;
-    }
 
     return true;
 }
@@ -198,48 +89,6 @@ bool App::initialize() {
 void App::initializeGlState() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.08f, 0.10f, 0.12f, 1.0f);
-}
-
-bool App::initializeRenderResources() {
-    dropletProgram_ = createShaderProgram("assets/shaders/droplet.vert", "assets/shaders/droplet.frag");
-    if (dropletProgram_ == 0) return false;
-
-    planeProgram_ = createShaderProgram("assets/shaders/scene.vert", "assets/shaders/scene.frag");
-    if (planeProgram_ == 0) return false;
-
-    initializePlaneMesh();
-    return planeVao_ != 0 && planeEbo_ != 0;
-}
-
-void App::initializePlaneMesh() {
-    planeIndexCount_ = static_cast<int>(kPlaneIndices.size());
-
-    glGenVertexArrays(1, &planeVao_);
-    glGenBuffers(1, &planeVbo_);
-    glGenBuffers(1, &planeEbo_);
-
-    glBindVertexArray(planeVao_);
-
-    glBindBuffer(GL_ARRAY_BUFFER, planeVbo_);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneVertices.size() * sizeof(float)),
-                 kPlaneVertices.data(),
-                 GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeEbo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneIndices.size() * sizeof(unsigned int)),
-                 kPlaneIndices.data(),
-                 GL_STATIC_DRAW);
-
-    constexpr int stride = 6 * static_cast<int>(sizeof(float));
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 }
 
 void App::buildDefaultScene() {
@@ -266,7 +115,6 @@ void App::buildDefaultScene() {
 }
 
 void App::restartSimulation() {
-    dropletCache_.clear();
     scene_ = Scene{};
     sim_.reset();
     dragField_.reset();
@@ -322,75 +170,18 @@ void App::update() {
 }
 
 void App::render() {
-    using Clock = std::chrono::high_resolution_clock;
-    const auto start = Clock::now();
-
-    glViewport(0, 0, width_, height_);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    const glm::vec3 eye = toGlm(camera_.position());
-    const glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    const float aspect = height_ > 0 ? static_cast<float>(width_) / static_cast<float>(height_) : 1.0f;
-    const glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-    const glm::mat4 model(1.0f);
-
-    if (planeProgram_ != 0 && planeVao_ != 0) {
-        glUseProgram(planeProgram_);
-        setMat4(planeProgram_, "uModel", model);
-        setMat4(planeProgram_, "uView", view);
-        setMat4(planeProgram_, "uProj", proj);
-
-        glBindVertexArray(planeVao_);
-        glDrawElements(GL_TRIANGLES, planeIndexCount_, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
-    }
-
-    if (dropletProgram_ != 0) {
-        dropletCache_.sync(scene_.droplets());
-
-        glUseProgram(dropletProgram_);
-        setMat4(dropletProgram_, "uModel", model);
-        setMat4(dropletProgram_, "uView", view);
-        setMat4(dropletProgram_, "uProj", proj);
-        setVec3(dropletProgram_, "uLightDir", kLightDir);
-        setVec3(dropletProgram_, "uViewPos", eye);
-
-        for (const auto& droplet : scene_.droplets()) {
-            dropletCache_.drawDroplet(droplet->id());
-        }
-    }
-
-    glUseProgram(0);
-
-    const auto end = Clock::now();
-    RenderStats stats;
+    RenderStats stats{};
     stats.frameWidth = width_;
     stats.frameHeight = height_;
-    stats.renderMs = std::chrono::duration<double, std::milli>(end - start).count();
+
+    if (renderer_) {
+        stats = renderer_->render(scene_, camera_, renderParams_);
+    }
 
     if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
 }
 
-void App::destroyRenderResources() {
-    dropletCache_.clear();
-
-    if (planeEbo_ != 0) glDeleteBuffers(1, &planeEbo_);
-    if (planeVbo_ != 0) glDeleteBuffers(1, &planeVbo_);
-    if (planeVao_ != 0) glDeleteVertexArrays(1, &planeVao_);
-    if (planeProgram_ != 0) glDeleteProgram(planeProgram_);
-    if (dropletProgram_ != 0) glDeleteProgram(dropletProgram_);
-
-    dropletProgram_ = 0;
-    planeProgram_ = 0;
-    planeVao_ = 0;
-    planeVbo_ = 0;
-    planeEbo_ = 0;
-    planeIndexCount_ = 0;
-}
-
 void App::shutdown() {
-    destroyRenderResources();
-
     logger_.reset();
     ui_.reset();
     dragInteractor_.reset();

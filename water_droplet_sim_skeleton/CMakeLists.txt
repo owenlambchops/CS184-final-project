@@ -42,6 +42,7 @@ add_library(wd_core
     src/sim/single_droplet_solver.cpp
     src/sim/merge_split_controller.cpp
     src/sim/simulation_system.cpp
+    src/render/shader.cpp
     src/render/gpu_mesh_buffer.cpp
     src/render/droplet_gpu_cache.cpp
     src/render/refractive_renderer.cpp
