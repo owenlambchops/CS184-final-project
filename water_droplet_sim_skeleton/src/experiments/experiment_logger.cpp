@@ -14,6 +14,7 @@ void ExperimentLogger::record(double timeSec, const Scene& scene,
     s.timeSec = timeSec;
     s.simMs = simStats.simMs;
     s.renderMs = renderStats.renderMs;
+    s.fps = renderStats.fps;
     s.meanVolumeError = simStats.meanVolumeError;
     s.maxVolumeError = simStats.maxVolumeError;
     s.dropletCount = static_cast<int>(scene.droplets().size());
@@ -27,12 +28,13 @@ void ExperimentLogger::record(double timeSec, const Scene& scene,
 
 void ExperimentLogger::saveCsv(const std::string& path) const {
     std::ofstream out(path);
-    out << "run,time_sec,sim_ms,render_ms,mean_volume_error,max_volume_error,droplet_count,total_vertex_count\n";
+    out << "run,time_sec,sim_ms,render_ms,fps,mean_volume_error,max_volume_error,droplet_count,total_vertex_count\n";
     for (const auto& s : samples_) {
         out << runName_ << ','
             << s.timeSec << ','
             << s.simMs << ','
             << s.renderMs << ','
+            << s.fps << ','
             << s.meanVolumeError << ','
             << s.maxVolumeError << ','
             << s.dropletCount << ','

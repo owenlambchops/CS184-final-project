@@ -8,6 +8,7 @@ struct MetricSample {
     double timeSec = 0.0;
     double simMs = 0.0;
     double renderMs = 0.0;
+    double fps = 0.0;
     double meanVolumeError = 0.0;
     double maxVolumeError = 0.0;
     int dropletCount = 0;

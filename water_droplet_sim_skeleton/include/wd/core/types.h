@@ -96,6 +96,9 @@ struct RenderStats {
     double renderMs = 0.0;
     int frameWidth = 0;
     int frameHeight = 0;
+    double fps = 0.0;
+    double fixedStepMs = 0.0;
+    double accumulatorMs = 0.0;
 };
 
 } // namespace wd

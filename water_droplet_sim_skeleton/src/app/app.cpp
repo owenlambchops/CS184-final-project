@@ -125,10 +125,29 @@ int App::run() {
     }
 
     while (!glfwWindowShouldClose(window_)) {
+        const auto frameStart = std::chrono::high_resolution_clock::now(); // ADD
+        
         glfwPollEvents();
         processInput();
-        update();
-        render();
+        
+        // timestep logic for update()
+        auto now = std::chrono::high_resolution_clock::now();
+        double dt = std::chrono::duration<double>(now - lastTime_).count();
+        lastTime_ = now;
+        dt = std::min(dt, 0.1);
+        
+        accumulator_ += dt;
+        while (accumulator_ >= kFixedStep) {
+            if (!paused_ || singleStepRequested_) {
+                update();
+                singleStepRequested_ = false;
+            } else {
+                accumulator_ = 0.0; // don't let it build up while paused
+            }
+            accumulator_ -= kFixedStep;
+        }
+        
+        render(frameStart); // CHANGED
         glfwSwapBuffers(window_);
     }
 
@@ -192,6 +211,11 @@ bool App::initialize() {
         return false;
     }
 
+    // Initial timestamp for very first frame dt calculation
+    lastTime_ = std::chrono::high_resolution_clock::now();
+    // initialize buffer/experiment results CSV
+    if (logger_) logger_->beginRun("default");
+    
     return true;
 }
 
@@ -315,13 +339,12 @@ void App::update() {
     if (dragInteractor_ && input_) {
         dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
     }
-    if (sim_ && (!paused_ || singleStepRequested_)) {
+    if (sim_) {
         sim_->step(scene_);
-        singleStepRequested_ = false;
     }
 }
 
-void App::render() {
+void App::render(std::chrono::high_resolution_clock::time_point frameStart) {
     using Clock = std::chrono::high_resolution_clock;
     const auto start = Clock::now();
 
@@ -363,10 +386,18 @@ void App::render() {
     glUseProgram(0);
 
     const auto end = Clock::now();
+    
+    const double totalFrameMs = std::chrono::duration<double, std::milli>(end - frameStart).count();
+    
     RenderStats stats;
     stats.frameWidth = width_;
     stats.frameHeight = height_;
     stats.renderMs = std::chrono::duration<double, std::milli>(end - start).count();
+    
+    stats.fps = 1000.0 / totalFrameMs;
+    // record fps, fixed time step, and time debt in accumulator
+    stats.fixedStepMs = kFixedStep * 1000.0;
+    stats.accumulatorMs = accumulator_ * 1000.0;
 
     if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
 }
@@ -389,6 +420,9 @@ void App::destroyRenderResources() {
 }
 
 void App::shutdown() {
+    // save experiment results csv
+    if (logger_) logger_->saveCsv("experiment_results.csv");
+    
     destroyRenderResources();
 
     logger_.reset();

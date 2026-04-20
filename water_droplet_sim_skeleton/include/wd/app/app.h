@@ -26,7 +26,7 @@ private:
     void restartSimulation();
     void processInput();
     void update();
-    void render();
+    void render(std::chrono::high_resolution_clock::time_point frameStart);
     void destroyRenderResources();
     void shutdown();
 
@@ -66,6 +66,10 @@ private:
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    
+    std::chrono::high_resolution_clock::time_point lastTime_;
+    double accumulator_ = 0.0;
+    static constexpr double kFixedStep = 1.0 / 20.0;
 };
 
 } // namespace wd
