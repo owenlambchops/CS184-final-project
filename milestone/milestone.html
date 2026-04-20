@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS184 Milestone – Real Time Interactive Water Droplets</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #000;
+      background: #fff;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 56px 48px 80px;
+    }
+
+    .title-block {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .title-block h1 {
+      font-size: 18pt;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .title-block .subtitle { font-size: 11pt; margin-bottom: 4px; }
+    .title-block .authors  { font-size: 11pt; margin-bottom: 6px; }
+    .title-block .links-inline { font-size: 10pt; }
+
+    a { color: #1155cc; text-decoration: underline; }
+
+    h2 {
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 22px;
+      margin-bottom: 6px;
+    }
+
+    p { margin-bottom: 10px; }
+
+    ul { margin: 0 0 10px 24px; }
+    ul li { margin-bottom: 4px; }
+
+    .deliverables-box {
+      margin-top: 28px;
+      border-top: 1px solid #aaa;
+      padding-top: 14px;
+      font-size: 10.5pt;
+    }
+    .deliverables-box p { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="title-block">
+    <h1>Real Time Interactive Water Droplets</h1>
+    <div class="subtitle">CS 184 Final Project Milestone, Spring 2026</div>
+    <div class="authors">Haoyi Yu, Yoko Furukawa, Kevin Ying, Owen Lam</div>
+    <div class="links-inline">
+      Repo: <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">https://github.com/owenlambchops/CS184-final-project</a><br>
+      Website: <a href="https://owenlambchops.github.io/CS184-final-project/" target="_blank">https://owenlambchops.github.io/CS184-final-project/</a>
+    </div>
+  </div>
+
+  <h2>Accomplishments So Far</h2>
+  <p>
+    We have established the full C++ project architecture for the water droplet simulator. The codebase is organized into modular subsystems under src/: core (droplet mesh and data structures), sim (solver logic), forces (surface tension, adhesion, drag), surface (plane abstraction), render (OpenGL stubs), interaction (drag force field), ui (ImGui stubs), and app (application entry point), with main.cpp as the entry point. The build system is set up via CMake with vcpkg dependency management, targeting cross-platform compatibility between macOS M1 and Ubuntu 22.04. Key simulation classes — PlaneSurface, DropletTemplate, DropletFactory, and SingleDropletSolver — are defined and architecturally connected.
+  </p>
+
+  <h2>Preliminary Results</h2>
+  <p>
+    The project skeleton compiles and runs. The CPU-side simulation architecture is in place with clear separation between physics logic and rendering. The OpenGL renderer and ImGui UI exist as stubs, ready for graphics code to be filled in without interference from the simulation core. Parameter hooks for friction, viscosity, surface tension, contact angle, and volume correction are stubbed into the solver interface.
+  </p>
+  <ul>
+    <li>Simulation environment setup: complete</li>
+    <li>Basic droplet physics (surface tension, adhesion): in progress</li>
+    <li>Zero-gravity interactive drag: in progress</li>
+    <li>Vertical glass surface mode: in progress</li>
+    <li>Real-time refractive shading: in progress</li>
+  </ul>
+
+  <h2>Reflection on Progress</h2>
+  <p>
+    Our April 20 milestone target was a working simulation environment, correct water drop behavior, and a basic functioning interactive UI. [Describe your honest status — e.g.: We are on track with the simulation core and interactive interface, though refractive shading is still being finalized. Cross-platform build issues between macOS M1 and Ubuntu consumed approximately X days of additional setup time.]
+  </p>
+
+  <h2>Updated Work Plan</h2>
+  <ul>
+    <li><strong>Apr 20–25:</strong> Complete remaining baseline components (refractive shading, vertical surface with gravity); begin drafting project report; start on physically accurate merging/splitting and real-time caustics.</li>
+    <li><strong>Apr 26–May 2:</strong> Aspiration goals — merging/splitting, caustics, customizable viscosity and friction, non-flat surface support. Finalize deliverable video and project website.</li>
+    <li><strong>May 4:</strong> Final deliverable deadline.</li>
+    <li><strong>May 5:</strong> Presentation.</li>
+  </ul>
+
+  <div class="deliverables-box">
+    <p><strong>Milestone Video:</strong> <a href="YOUR_VIDEO_LINK_HERE" target="_blank">YOUR_VIDEO_LINK_HERE</a></p>
+    <p><strong>Presentation Slides:</strong> <a href="YOUR_SLIDES_LINK_HERE" target="_blank">YOUR_SLIDES_LINK_HERE</a></p>
+  </div>
+
+</body>
+</html>
