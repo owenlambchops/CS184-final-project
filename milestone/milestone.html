@@ -76,6 +76,36 @@
     <h2>Accomplishments So Far</h2>
     <h3>Water Droplets Simulation</h3>
     <p>
+    		setup python and c++ environments for water droplet simulation.
+        a python file and notebook are setup to develop and test water droplet dynamics on a mesh.
+        
+        currently, focused on modelling position and velocity models in the paper by Zhang et al. 2012. which includes surface 
+        tension, viscocity dampening local and global volume correction, water to surface friction and hydrophobicity behaviour 
+        as modeled by correcting the boundary angles using additional forces.
+        
+        zhang et al. used a numerical simulation method on a point lumped mass surface representation, with explicit Euler integration.
+        While this worked well in simulating fluid-like behaviour, the current version struggles to maintain a round droplet shape, but
+        rather collapses into a flat puddle. testing shows that this may be due to low surface tension coefficient (gamma), high lumped
+        mass density / gravity, large number of verticies (also contributing to increased mass). However, increasing them led to numerically 
+        unstable or underdamped behaviour, where restoring forces from the surface tension accumulates oscilations that breaks the droplet.
+        One can increase the viscosity beyond the recommended range in the paper (0.3~0.5) to dampen the behaviour, which is not ideal as
+        it prevents up from fully reproducing the paper's simulation results.
+        
+        to verify water tension term, we ran the simulation of a isolated mesh in zero-gravity. it was shown that the verticies self-distributes 
+        evenly along the surface, as expected. to further test this, we initialised the droplet as a rectangular mesh, showing that the mesh also
+         collapses correctly into a spherical shape.
+        
+        to verify the surface contact angle, we tested the droplet in a gravity environment with different contact angle ranges. we did see a 
+        notible effect on the roundless of the droplet, consistent with the literature. although unfortunatley, perhaps due to the low resolution
+        or the lack of vertices or paramter tuning, we were not able to decern a clear droplet to surface boundary as exactly shown in the paper.
+        
+        Another direction is the numerical integration methods. Euler's method suffers with larger step sizes, while from HW4, it is mentioned
+        that Verlet method was more suitable for simulating particles.
+        
+        
+        
+    </p>
+    <p>
         We have implemented a water droplet simulation in C++ with OpenGL 3.3.
         The physics simulations runs end-to-end each frame via <code>SimulationSystem</code>, stepping
         each droplet through <code>SingleDropletSolver</code> with configurable substeps and explicit Euler
@@ -90,7 +120,8 @@
     </ul>
     <p>
         Surface collisions are modeled with pushout, bounce, and sliding friction. 
-        Volume preservation is tracked per-frame using signed tetrahedral summation over the open mesh, closed by a fan-triangulated boundary cap.
+        Volume preservation is tracked per-frame using signed tetrahedral summation over the open mesh, 
+        closed by a fan-triangulated boundary cap.
     </p>
     <h3>Surface Tention</h3>
     <p>
