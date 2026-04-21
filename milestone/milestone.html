@@ -52,6 +52,73 @@
     ul { margin: 0 0 10px 24px; }
     ul li { margin-bottom: 4px; }
 
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 10px 0 6px;
+    }
+
+    .media-card {
+      border: 1px solid #d9d9d9;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+
+    .media-card h4 {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .media-card p {
+      margin-top: 8px;
+      margin-bottom: 0;
+      font-size: 10.5pt;
+    }
+
+    .video-embed {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border-radius: 6px;
+      background: #000;
+    }
+
+    .video-embed iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    .video-embed video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border: 0;
+      background: #000;
+    }
+
+    .video-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 180px;
+      border: 1px dashed #b5b5b5;
+      border-radius: 6px;
+      background: #fff;
+      color: #666;
+      font-size: 10.5pt;
+      text-align: center;
+      padding: 16px;
+    }
+
     .deliverables-box {
       margin-top: 28px;
       border-top: 1px solid #aaa;
@@ -73,12 +140,50 @@
         </div>
     </div>
 
-    <h2>Accomplishments So Far</h2>
+    <div class="deliverables-box">
+      <div class="video-embed">
+      <video controls playsinline preload="metadata">
+        <source src="CS%20184%20Final%20Project/Python%20Simulation/cs184_milestone.mp4" type="video/mp4" />
+      </video>
+    </div>
+    <p>Milestone Report Video</p>
+      <p><strong>Milestone Video:</strong> <a href="https://drive.google.com/file/d/1lIjJaiXlvD0YYzroQGLhXLgO2NrP6eCi/view?usp=share_link" target="_blank">https://drive.google.com/file/d/1lIjJaiXlvD0YYzroQGLhXLgO2NrP6eCi/view?usp=share_link</a></p>
+      <p><strong>Demo Videos and Presentation Slides:</strong> <a href="https://drive.google.com/drive/folders/1ERa1MZMjEyJpF8cdRLcj0y_EupMw3hL1?usp=sharing" target="_blank">https://drive.google.com/drive/folders/1ERa1MZMjEyJpF8cdRLcj0y_EupMw3hL1?usp=sharing</a></p>
+      
+    </div>
+
+    <h2>Abstract</h2>
+    <p>
+      We have set up Python and C++ environments to simulate water droplet dynamics on a mesh. Our primary focus is implementing the position and velocity models described by Zhang et al. (2012). This model accounts for surface tension, viscosity dampening, local and global volume correction, water-to-surface friction, and hydrophobicity, which is modeled by applying additional forces to correct boundary angles. We have met our goals on the physics and interaction side and completed the solver, force fields, surface backends, merge/split, and GPU mesh pipeline.
+    </p>
+
+    <h2>Technical Approach</h2>
+    <p>
+      The current simulation stack remains a C++ / OpenGL 3.3 implementation driven by <code>SimulationSystem</code> and <code>SingleDropletSolver</code>. Each droplet is advanced per frame with explicit Euler integration and configurable substeps, applying cotangent-weighted surface tension, Laplacian viscosity, volume-stiffness correction, contact-line forces for advancing and receding angles, and external force sampling. Surface collisions use pushout, bounce, and sliding friction, and volume preservation is tracked with signed tetrahedral summation over the open mesh closed by a fan-triangulated boundary cap.
+    </p>
+
+    <h3>Algorithms Implemented</h3>
+    <ul>
+      <li><strong>Fibonacci Sphere Sampling:</strong> Uniformly distributes points on a sphere for initial droplet mesh generation.</li>
+      <li><strong>Convex Hull Construction:</strong> Generates a convex polyhedral mesh from sampled points.</li>
+      <li><strong>Rectangular Cuboid Surface Meshing:</strong> Creates triangulated surface meshes for rectangular and cuboid droplets.</li>
+      <li><strong>Cotangent Laplacian Calculation:</strong> Computes cotangent weights for Laplace-Beltrami operator discretization.</li>
+      <li><strong>Vertex Normal and Volume Calculation:</strong> Calculates per-vertex normals and exact mesh volume for physical forces and corrections.</li>
+      <li><strong>Lumped Mass Matrix Computation:</strong> Assigns mass to each vertex based on local surface area.</li>
+      <li><strong>Explicit Euler and Velocity-Verlet Integration:</strong> Advances the simulation using both explicit Euler and adaptive velocity-Verlet schemes.</li>
+      <li><strong>Mean Curvature Flow (Implicit Integration):</strong> Optionally smooths the mesh using implicit mean curvature flow.</li>
+      <li><strong>Contact Angle Boundary Force:</strong> Enforces receding/advancing contact angle constraints at the substrate interface.</li>
+      <li><strong>Surface Interaction and Friction:</strong> Handles collisions, sliding, and friction with the ground plane.</li>
+      <li><strong>Local and Global Volume Correction:</strong> Preserves droplet volume using both local and global correction operators.</li>
+      <li><strong>Adaptive Time Stepping:</strong> Adjusts substep count based on maximum acceleration and mesh edge length for stability.</li>
+      <li><strong>Visualization and Animation:</strong> Uses Matplotlib and FuncAnimation for 3D rendering and video output.</li>
+    </ul>
     
     <h3>Water Droplets Simulation</h3>
     <p>
         We have set up Python and C++ environments to simulate water droplet dynamics on a mesh, currently utilizing a Python script and 
-        notebook for development and testing. Our primary focus is implementing the position and velocity models described by Zhang et al. (2012). 
+        notebook for development and testing. We visualised the simulations using Matplotlib asynchronously, outputting as video files. 
+        Our primary focus is implementing the position and velocity models described by Zhang et al. (2012). 
         This model accounts for surface tension, viscosity dampening, local and global volume correction, water-to-surface friction, and 
         hydrophobicity, which is modeled by applying additional forces to correct boundary angles.
     </p>
@@ -96,20 +201,94 @@
         increasing the viscosity beyond the paper's recommended range (0.3-0.5), but this is not ideal as it prevents us from faithfully 
         reproducing the original simulation results.
     </p>
+    
+    <div class="media-grid">
+      <div class="media-card">
+        <h4>Gamma 500</h4>
+        <div class="video-embed">
+          <video controls playsinline preload="metadata">
+            <source src="CS%20184%20Final%20Project/Python%20Simulation/gamma%28500%29_mu%2810%29_eta%280.1%29_k_v%281200%29_fric%282.0%29_dens%280.1%29.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <p>Gamma 500 uses density 0.1, which made the droplet very unstable.</p>
+      </div>
+      <div class="media-card">
+        <h4>Gamma 600</h4>
+        <div class="video-embed">
+          <video controls playsinline preload="metadata">
+            <source src="CS%20184%20Final%20Project/Python%20Simulation/gamma%28600%29_mu%2810%29_eta%281%29_k_v%281200%29_fric%282.0%29_dens%280.5%29.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <p>Gamma 600 uses density 0.5, which was heavy enough to stay stable.</p>
+      </div>
+    </div>
 
     <h3>Component Verification</h3>
     <p>
-        To isolate and verify our physical parameters, we ran the following tests:
+      To isolate and verify our physical parameters, we ran the following tests and recorded representative clips:
     </p>
     <ul>
-        <li><strong>Surface Tension:</strong> We simulated an isolated mesh in a zero-gravity environment. As expected, the vertices 
-            self-distributed evenly along the surface. To further test this, we initialized the droplet as a rectangular mesh and observed it 
-            correctly collapse into a spherical shape.</li>
-        <li><strong>Surface Contact Angle:</strong> We tested the droplet in a gravity environment across different contact angle ranges. 
+        <div class="media-card">
+          <h4>Surface Tension Reference: Rectangular Droplet in Zero Gravity</h4>
+          <div class="video-embed">
+            <video controls playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;display:block;">
+              <source src="CS%20184%20Final%20Project/Python%20Simulation/cube_collapse_zero_gravity_surface_tension.mp4" type="video/mp4" />
+            </video>
+          </div>
+          <p><strong>Surface Tension:</strong> We simulated an isolated mesh in a zero-gravity environment. As expected, the vertices 
+          self-distributed evenly along the surface. To further test this, we initialized the droplet as a rectangular mesh and observed it 
+          correctly collapse into a spherical shape.</p>
+        </div>
+
+        <p></p>
+        
+        <div class="media-card">
+          <h4>High Vertex Density</h4>
+          <div class="video-embed">
+            <video controls playsinline preload="metadata">
+              <source src="CS%20184%20Final%20Project/Python%20Simulation/droplet_high_vertex_density.mp4" type="video/mp4" />
+            </video>
+          </div>
+          <p><strong>Surface Contact Angle:</strong> We tested the droplet in a gravity environment across different contact angle ranges. 
             We observed a notable effect on the roundness of the droplet, consistent with the literature. Unfortunately, likely due to low 
             mesh resolution or inadequate parameter tuning, we could not discern the clear droplet-to-surface boundary shown in the original 
-            paper.</li>
+            paper.</p>
+        </div>
     </ul>
+        
+        <h4>Contact Angle Clips</h4>
+        <p>
+          Due to the low vertex count and a proportionally high surface tension coefficient, our simulations with different contact angles did not exhibit strong visual differences. Further parameter tuning and improved droplet stability will be necessary to produce clearer, more distinct contact angle effects in future tests.
+        </p>
+        <div class="media-grid">
+          <div class="media-card">
+            <h4>45 Degrees</h4>
+            <div class="video-embed">
+              <video controls playsinline preload="metadata">
+                <source src="CS%20184%20Final%20Project/Python%20Simulation/45_degree_contact.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <p>Contact angle clip at 45 degrees.</p>
+          </div>
+          <div class="media-card">
+            <h4>85-95 Degrees</h4>
+            <div class="video-embed">
+              <video controls playsinline preload="metadata">
+                <source src="CS%20184%20Final%20Project/Python%20Simulation/90_degrees_contact.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <p>Contact angle clip spanning 85-95 degrees.</p>
+          </div>
+          <div class="media-card">
+            <h4>105-125 Degrees</h4>
+            <div class="video-embed">
+              <video controls playsinline preload="metadata">
+                <source src="CS%20184%20Final%20Project/Python%20Simulation/105_125_degrees_gamma50_mu3_eta0.98_kv_2000_rho0.1_alpha0.15-1.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <p>Contact angle clip spanning 105-125 degrees.</p>
+          </div>
+        </div>
 
     <h3>Surface Tension</h3>
     <p>
@@ -123,6 +302,14 @@
         In each substep, we recompute per-droplet derived quantities (vertex normals, center of mass, average velocity, footprint radius, 
         elongation ratio, and principal axis).
     </p>
+
+    <h2>Unique Decisions and Enhancements</h2>
+
+    <h3>Numerical Stability</h3>
+    <p>
+      it is mentioned that verlet integration yields more accurate results for particle simulations in a time-efficient way.
+    </p>
+
     <h3>GPU Rendering</h3>
     <p>
         <code>DropletGpuCache</code> syncs VAO/VBO/EBO buffers against the live droplet list each frame, and the scene renders with Phong 
@@ -136,25 +323,15 @@
         full-screen refraction composite) before the full feature set is complete.
     </p>
 
-    <h2>Preliminary Results</h2>
-    <ul>
-        <li>Simulation environment setup: <strong>complete</strong></li>
-        <li>Basic droplet physics (surface tension, adhesion): <strong>complete</strong></li>
-        <li>Zero-gravity interactive drag: <strong>complete</strong></li>
-        <li>Vertical glass surface mode: <strong>complete</strong></li>
-        <li>Real-time refractive shading: <strong>in progress</strong></li>
-    </ul>
     <h3>
         A single droplet spawns on a flat plane
     </h3>
-    <!-- Todo: insert video here -->
-    <iframe width="560" height="315" 
-        src="https://www.youtube.com/embed/gXAw33ghNRE"
-        title="YouTube video player" 
-        frameborder="0" 
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-        allowfullscreen>
-    </iframe>
+    <div class="video-embed">
+      <video controls playsinline preload="metadata">
+        <source src="CS%20184%20Final%20Project/Python%20Simulation/haoyi_GUI.mp4" type="video/mp4" />
+      </video>
+    </div>
+    
     <p>
         Droplets responds to gravity-like forces and contact angle constraints, and it can be dragged in real time via mouse input. </br>
         The droplet mesh renders with Phong lighting and its GPU buffers update dynamically each frame. Frame render time and volume error 
@@ -163,14 +340,28 @@
         FBO-based composite pass is being completed). </br>
     </p>
 
-
-    <h2>Reflection on Progress</h2>
+    <h2>Lessons Learned</h2>
     <p>
-        Our April 20 milestone target was a working simulation environment, correct water drop behavior,
-        and a basic functioning interactive UI. We have met all of these goals on the physics
-        and interaction side and completed the solver, force fields, surface backends, merge/split, and GPU mesh
-        pipeline. Our next goal is to complete refractive shading composite pass and improve UI controller.
+      We learned that we can dampen the aforementioned mesh oscillations by increasing the viscosity beyond the paper's recommended range (0.3-0.5), but this is not ideal as it prevents us from faithfully reproducing the original simulation results.
     </p>
+    <p>
+      Regarding numerical stability, it is mentioned that Verlet integration yields more accurate results for particle simulations in a time-efficient way, which we noted as a potential alternative to explicit Euler.
+    </p>
+    <p>
+      Finally, we observed that due to a low vertex count and a proportionally high surface tension coefficient, our simulations with different contact angles did not exhibit strong visual differences. We learned that further parameter tuning and improved droplet stability will be necessary to produce clearer, more distinct contact angle effects.
+    </p>
+
+  <h2>Results</h2>
+  <p>
+    We have successfully completed the simulation environment setup, basic droplet physics (surface tension, adhesion), zero-gravity interactive drag, and vertical glass surface mode. Real-time refractive shading is currently in progress.
+  </p>
+  <ul>
+    <li><strong>Python Environment Verification:</strong> Initial test utilizing our Python environment with diagonal force applied. <a href="https://drive.google.com/file/d/1LyP-WyuuC1WlAFOXfxtSv4-OX3MLR-8q/view?usp=sharing" target="_blank">[Watch Video]</a></li>
+    <li><strong>Stability Tests (Gamma/Density):</strong> We tested Gamma 500 using a density of 0.1, which made the droplet very unstable <a href="https://drive.google.com/file/d/1cAIqFqieKI1td8-VZrz3vk8cPIiuxKsn/view?usp=sharing" target="_blank">[Watch Video]</a>. Conversely, Gamma 600 using a density of 0.5 was heavy enough to stay stable <a href="https://drive.google.com/file/d/1cAIqFqieKI1td8-VZrz3vk8cPIiuxKsn/view?usp=sharing" target="_blank">[Watch Video]</a>.</li>
+    <li><strong>Surface Tension Reference (Zero Gravity):</strong> We simulated an isolated mesh in a zero-gravity environment. As expected, the vertices self-distributed evenly along the surface. We initialized the droplet as a rectangular mesh and observed it correctly collapse into a spherical shape. <a href="https://drive.google.com/file/d/1TZL_ldDGrBpvFUBSL8Kav0f58LbqSsDt/view?usp=sharing" target="_blank">[Watch Video]</a></li>
+    <li><strong>Surface Contact Angle:</strong> We tested the droplet in a gravity environment across different contact angle ranges. We recorded clips at <strong><a href="https://drive.google.com/file/d/1cAIqFqieKI1td8-VZrz3vk8cPIiuxKsn/view?usp=sharing" target="_blank">45 degrees</a></strong>, <strong><a href="https://drive.google.com/file/d/1cAIqFqieKI1td8-VZrz3vk8cPIiuxKsn/view?usp=sharing" target="_blank">85-95 degrees</a></strong>, and <strong><a href="https://drive.google.com/file/d/1TZL_ldDGrBpvFUBSL8Kav0f58LbqSsDt/view?usp=sharing" target="_blank">105-125 degrees</a></strong>. We did not observe strong visual differences, as low mesh resolution prevented us from discerning the clear droplet-to-surface boundary shown in the original paper.</li>
+    <li><strong>Interactive Real-Time GUI:</strong> A single droplet spawns on a flat plane. Droplets respond to gravity-like forces and contact angle constraints, and can be dragged in real time via mouse input. The droplet mesh renders with Phong lighting and its GPU buffers update dynamically each frame. <a href="https://drive.google.com/file/d/16I_7ZI9rekMt5TeVe3MmOXfu3e8ya41u/view?usp=sharing" target="_blank">[Watch Video]</a></li>
+  </ul>
 
     <h2>Next Steps</h2>
     <p>
@@ -191,15 +382,27 @@
       preservation is tracked with signed tetrahedral summation over the open mesh closed by a fan-triangulated boundary cap.
     </p>
     <p>
+      Additional comparison clips in the writeup now show how vertex density, contact angle, and surface tension affect the final droplet shape,
+      with placeholders reserved for the remaining unlinked experiments.
+    </p>
+    <p>
       If solver instability remains a problem, we may revisit alternative integration methods, but our immediate focus is on completing 
       the refractive rendering and UI work before the <strong>May 4</strong> final deliverable deadline and the <strong>May 5</strong> 
       presentation.
     </p>
 
-  <div class="deliverables-box">
-    <p><strong>Milestone Video:</strong> <a href="YOUR_VIDEO_LINK_HERE" target="_blank">YOUR_VIDEO_LINK_HERE</a></p>
-    <p><strong>Presentation Slides:</strong> <a href="https://docs.google.com/presentation/d/1UWWy1_em_KYXITOWdtBno-XVeRrgFhSO6MdhrP7c1O4/edit?slide=id.p#slide=id.p" target="_blank">Presentation Slide</a></p>
-  </div>
+  <h2>References</h2>
+  <ul>
+    <li>Zhang et al. (2012) – Position and velocity models for water droplet simulation (accounting for surface tension, viscosity dampening, and boundary angle correction).</li>
+  </ul>
+
+  <h2>Contributions from Each Team Member</h2>
+  <ul>
+    <li><strong>Haoyi Yu:</strong> Developed the Droplet Spawning GUI and shading features, established the C++ environment and skeleton code, and implemented the GPU rendering pipeline. Contributed to the C++/Python codebase throughout the project.</li>
+    <li><strong>Kevin Ying:</strong> Implemented the physics simulation algorithms, integrated the Python environment setup, and contributed to the C++/Python codebase.</li>
+    <li><strong>Yoko Furukawa:</strong> Helped with the project writeup and documentation, conducted research on water droplet simulation and rendering.</li>
+    <li><strong>Owen Lam:</strong> Set up the GitHub repository and project website.</li>
+  </ul>
 
 </body>
 </html>
