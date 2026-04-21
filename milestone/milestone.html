@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS184 Milestone – Real Time Interactive Water Droplets</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #000;
+      background: #fff;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 56px 48px 80px;
+    }
+
+    .title-block {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .title-block h1 {
+      font-size: 24pt;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .title-block .subtitle { font-size: 11pt; margin-bottom: 4px; }
+    .title-block .authors  { font-size: 11pt; margin-bottom: 6px; }
+    .title-block .links-inline { font-size: 10pt; }
+
+    a { color: #1155cc; text-decoration: underline; }
+
+    h2 {
+      font-size: 18pt;
+      font-weight: bold;
+      margin-top: 22px;
+      margin-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 16pt;
+      font-weight: bold;
+      margin-top: 22px;
+      margin-bottom: 6px;
+    }
+
+    p { margin-bottom: 10px; }
+
+    ul { margin: 0 0 10px 24px; }
+    ul li { margin-bottom: 4px; }
+
+    .deliverables-box {
+      margin-top: 28px;
+      border-top: 1px solid #aaa;
+      padding-top: 14px;
+      font-size: 10.5pt;
+    }
+    .deliverables-box p { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+
+    <div class="title-block">
+        <h1>Real Time Interactive Water Droplets</h1>
+        <div class="subtitle">CS 184 Final Project Milestone, Spring 2026</div>
+        <div class="authors">Haoyi Yu, Yoko Furukawa, Kevin Ying, Owen Lam</div>
+        <div class="links-inline">
+        Repo: <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">https://github.com/owenlambchops/CS184-final-project</a><br>
+        Website: <a href="https://owenlambchops.github.io/CS184-final-project/" target="_blank">https://owenlambchops.github.io/CS184-final-project/</a>
+        </div>
+    </div>
+
+    <h2>Accomplishments So Far</h2>
+    
+    <h3>Water Droplets Simulation</h3>
+    <p>
+        We have set up Python and C++ environments to simulate water droplet dynamics on a mesh, currently utilizing a Python script and 
+        notebook for development and testing. Our primary focus is implementing the position and velocity models described by Zhang et al. (2012). 
+        This model accounts for surface tension, viscosity dampening, local and global volume correction, water-to-surface friction, and 
+        hydrophobicity, which is modeled by applying additional forces to correct boundary angles.
+    </p>
+
+    <h3>Implementation Challenges</h3>
+    <p>
+        Zhang et al. implemented a numerical simulation method based on a point-lumped mass surface representation with explicit Euler 
+        integration. While our implementation successfully simulates general fluid-like behavior, the droplet currently struggles to maintain a 
+        round shape and instead collapses into a flat puddle. Testing suggests this may be due to a low surface tension coefficient (gamma), 
+        high lumped mass density or gravity, or a large number of vertices (which contributes to increased total mass).
+    </p>
+    <p>
+        Attempting to fix the flattening by increasing the surface tension leads to numerically unstable or underdamped behavior; the restoring 
+        forces from the surface tension accumulate oscillations that eventually break the droplet mesh. We can dampen these oscillations by 
+        increasing the viscosity beyond the paper's recommended range (0.3-0.5), but this is not ideal as it prevents us from faithfully 
+        reproducing the original simulation results.
+    </p>
+
+    <h3>Component Verification</h3>
+    <p>
+        To isolate and verify our physical parameters, we ran the following tests:
+    </p>
+    <ul>
+        <li><strong>Surface Tension:</strong> We simulated an isolated mesh in a zero-gravity environment. As expected, the vertices 
+            self-distributed evenly along the surface. To further test this, we initialized the droplet as a rectangular mesh and observed it 
+            correctly collapse into a spherical shape.</li>
+        <li><strong>Surface Contact Angle:</strong> We tested the droplet in a gravity environment across different contact angle ranges. 
+            We observed a notable effect on the roundness of the droplet, consistent with the literature. Unfortunately, likely due to low 
+            mesh resolution or inadequate parameter tuning, we could not discern the clear droplet-to-surface boundary shown in the original 
+            paper.</li>
+    </ul>
+
+    <h3>Surface Tension</h3>
+    <p>
+        Surface backends are implemented in <code>PlaneSurface</code> (flat plane with analytically
+        exact closest-point and raycast) and <code>HeightFieldSurface</code> (bilinearly interpolated height
+        grid with finite-difference gradient normals and sphere-marching raycast), both satisfying the
+        <code>ISurface</code> interface used throughout the solver and interaction pipeline. 
+        Droplet topology changes are implemented in <code>MergeSplitController</code>, which detects proximity-based merging and
+        elongation-based splitting each frame, with <code>DropletFactory</code> handling volume-weighted
+        blending for merge and principal-axis offset for split. 
+        In each substep, we recompute per-droplet derived quantities (vertex normals, center of mass, average velocity, footprint radius, 
+        elongation ratio, and principal axis).
+    </p>
+    <h3>GPU Rendering</h3>
+    <p>
+        <code>DropletGpuCache</code> syncs VAO/VBO/EBO buffers against the live droplet list each frame, and the scene renders with Phong 
+        shading via two GLSL programs. 
+        Mouse drag interaction projects through <code>Picker</code> raycasting against the active
+        surface into a radial falloff <code>DragForceField</code>. <code>ExperimentLogger</code> records
+        per-frame sim time, render time, and volume error to CSV. 
+        We are working on the <code>UiController</code> (Dear ImGui
+        sliders for solver, render, material, and merge/split parameters) and the
+        <code>RefractiveRenderer</code> three-pass pipeline (scene color/depth, droplet G-buffer,
+        full-screen refraction composite) before the full feature set is complete.
+    </p>
+
+    <h2>Preliminary Results</h2>
+    <ul>
+        <li>Simulation environment setup: <strong>complete</strong></li>
+        <li>Basic droplet physics (surface tension, adhesion): <strong>complete</strong></li>
+        <li>Zero-gravity interactive drag: <strong>complete</strong></li>
+        <li>Vertical glass surface mode: <strong>complete</strong></li>
+        <li>Real-time refractive shading: <strong>in progress</strong></li>
+    </ul>
+    <h3>
+        A single droplet spawns on a flat plane
+    </h3>
+    <!-- Todo: insert video here -->
+    <iframe width="560" height="315" 
+        src="https://www.youtube.com/embed/gXAw33ghNRE"
+        title="YouTube video player" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen>
+    </iframe>
+    <p>
+        Droplets responds to gravity-like forces and contact angle constraints, and it can be dragged in real time via mouse input. </br>
+        The droplet mesh renders with Phong lighting and its GPU buffers update dynamically each frame. Frame render time and volume error 
+        are logged per-frame to CSV. </br>
+        Refractive shading is in progress (the droplet currently renders as a solid lit mesh while the
+        FBO-based composite pass is being completed). </br>
+    </p>
+
+
+    <h2>Reflection on Progress</h2>
+    <p>
+        Our April 20 milestone target was a working simulation environment, correct water drop behavior,
+        and a basic functioning interactive UI. We have met all of these goals on the physics
+        and interaction side and completed the solver, force fields, surface backends, merge/split, and GPU mesh
+        pipeline. Our next goal is to complete refractive shading composite pass and improve UI controller.
+    </p>
+
+    <h2>Next Steps</h2>
+    <p>
+      Our next milestone is to finish the rendering and polish work while keeping the solver stable. From <strong>Apr 20–25</strong>, 
+      we will complete refractive shading, including FBO creation, the G-buffer pass, and the full-screen refraction composite shader, 
+      while also wiring up Dear ImGui parameter sliders and beginning the project report.
+    </p>
+    <p>
+      From <strong>Apr 26–May 2</strong>, we plan to add real-time caustics, continue merge/split polish, expose customizable fluid 
+      parameters through the UI, and build a height-field surface demo. During this window we will also finalize the deliverable video 
+      and project website.
+    </p>
+    <p>
+      The current simulation stack remains a C++ / OpenGL 3.3 implementation driven by <code>SimulationSystem</code> and 
+      <code>SingleDropletSolver</code>. Each droplet is advanced per frame with explicit Euler integration and configurable substeps, 
+      applying cotangent-weighted surface tension, Laplacian viscosity, volume-stiffness correction, contact-line forces for advancing 
+      and receding angles, and external force sampling. Surface collisions use pushout, bounce, and sliding friction, and volume 
+      preservation is tracked with signed tetrahedral summation over the open mesh closed by a fan-triangulated boundary cap.
+    </p>
+    <p>
+      If solver instability remains a problem, we may revisit alternative integration methods, but our immediate focus is on completing 
+      the refractive rendering and UI work before the <strong>May 4</strong> final deliverable deadline and the <strong>May 5</strong> 
+      presentation.
+    </p>
+
+  <div class="deliverables-box">
+    <p><strong>Milestone Video:</strong> <a href="YOUR_VIDEO_LINK_HERE" target="_blank">YOUR_VIDEO_LINK_HERE</a></p>
+    <p><strong>Presentation Slides:</strong> <a href="https://docs.google.com/presentation/d/1UWWy1_em_KYXITOWdtBno-XVeRrgFhSO6MdhrP7c1O4/edit?slide=id.p#slide=id.p" target="_blank">Presentation Slide</a></p>
+  </div>
+
+</body>
+</html>

@@ -72,6 +72,8 @@ target_compile_options(wd_core PRIVATE
 )
 
 add_executable(wd_skeleton src/main.cpp)
+target_include_directories(wd_skeleton PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
 target_link_libraries(wd_skeleton PRIVATE wd_core)
 
 file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
