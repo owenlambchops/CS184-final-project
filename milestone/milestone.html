@@ -23,7 +23,7 @@
       margin-bottom: 28px;
     }
     .title-block h1 {
-      font-size: 18pt;
+      font-size: 24pt;
       font-weight: bold;
       margin-bottom: 4px;
     }
@@ -34,7 +34,14 @@
     a { color: #1155cc; text-decoration: underline; }
 
     h2 {
-      font-size: 11pt;
+      font-size: 18pt;
+      font-weight: bold;
+      margin-top: 22px;
+      margin-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 16pt;
       font-weight: bold;
       margin-top: 22px;
       margin-bottom: 6px;
@@ -56,45 +63,100 @@
 </head>
 <body>
 
-  <div class="title-block">
-    <h1>Real Time Interactive Water Droplets</h1>
-    <div class="subtitle">CS 184 Final Project Milestone, Spring 2026</div>
-    <div class="authors">Haoyi Yu, Yoko Furukawa, Kevin Ying, Owen Lam</div>
-    <div class="links-inline">
-      Repo: <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">https://github.com/owenlambchops/CS184-final-project</a><br>
-      Website: <a href="https://owenlambchops.github.io/CS184-final-project/" target="_blank">https://owenlambchops.github.io/CS184-final-project/</a>
+    <div class="title-block">
+        <h1>Real Time Interactive Water Droplets</h1>
+        <div class="subtitle">CS 184 Final Project Milestone, Spring 2026</div>
+        <div class="authors">Haoyi Yu, Yoko Furukawa, Kevin Ying, Owen Lam</div>
+        <div class="links-inline">
+        Repo: <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">https://github.com/owenlambchops/CS184-final-project</a><br>
+        Website: <a href="https://owenlambchops.github.io/CS184-final-project/" target="_blank">https://owenlambchops.github.io/CS184-final-project/</a>
+        </div>
     </div>
-  </div>
 
-  <h2>Accomplishments So Far</h2>
-  <p>
-    We have established the full C++ project architecture for the water droplet simulator. The codebase is organized into modular subsystems under src/: core (droplet mesh and data structures), sim (solver logic), forces (surface tension, adhesion, drag), surface (plane abstraction), render (OpenGL stubs), interaction (drag force field), ui (ImGui stubs), and app (application entry point), with main.cpp as the entry point. The build system is set up via CMake with vcpkg dependency management, targeting cross-platform compatibility between macOS M1 and Ubuntu 22.04. Key simulation classes — PlaneSurface, DropletTemplate, DropletFactory, and SingleDropletSolver — are defined and architecturally connected.
-  </p>
+    <h2>Accomplishments So Far</h2>
+    <h3>Water Droplets Simulation</h3>
+    <p>
+        We have implemented a water droplet simulation in C++ with OpenGL 3.3.
+        The physics simulations runs end-to-end each frame via <code>SimulationSystem</code>, stepping
+        each droplet through <code>SingleDropletSolver</code> with configurable substeps and explicit Euler
+        integration. The solver applies five sequentially-ordered operators per substep:
+    </p>
+    <ul>
+        <li>cotangent-weighted</li>
+        <li>Laplacian viscosity</li>
+        <li>flow for surface tension with volume-stiffness correction</li>
+        <li>contact-line forces enforcing advancing and receding contact angle constraints</li>
+        <li>external force field sampling</li>
+    </ul>
+    <p>
+        Surface collisions are modeled with pushout, bounce, and sliding friction. 
+        Volume preservation is tracked per-frame using signed tetrahedral summation over the open mesh, closed by a fan-triangulated boundary cap.
+    </p>
+    <h3>Surface Tention</h3>
+    <p>
+        Surface backends are implemented in <code>PlaneSurface</code> (flat plane with analytically
+        exact closest-point and raycast) and <code>HeightFieldSurface</code> (bilinearly interpolated height
+        grid with finite-difference gradient normals and sphere-marching raycast), both satisfying the
+        <code>ISurface</code> interface used throughout the solver and interaction pipeline. 
+        Droplet topologychanges are implemented in <code>MergeSplitController</code>, which detects proximity-based merging and
+        elongation-based splitting each frame, with <code>DropletFactory</code> handling volume-weighted
+        blending for merge and principal-axis offset for split. 
+        In each substep, we recompute per-droplet derived quantities (vertex normals, center of mass, average velocity, footprint radius, elongation ratio, and principal axis).
+    </p>
+    <h3>GPU Rendering</h3>
+    <p>
+        <code>DropletGpuCache</code> syncs VAO/VBO/EBO buffers against the live droplet list each frame, and the scene renders with Phong shading via two GLSL programs. 
+        Mouse drag interaction projects through <code>Picker</code> raycasting against the active
+        surface into a radial falloff <code>DragForceField</code>. <code>ExperimentLogger</code> records
+        per-frame sim time, render time, and volume error to CSV. 
+        We are working on the <code>UiController</code> (Dear ImGui
+        sliders for solver, render, material, and merge/split parameters) and the
+        <code>RefractiveRenderer</code> three-pass pipeline (scene color/depth, droplet G-buffer,
+        full-screen refraction composite) before the full feature set is complete.
+    </p>
 
-  <h2>Preliminary Results</h2>
-  <p>
-    The project skeleton compiles and runs. The CPU-side simulation architecture is in place with clear separation between physics logic and rendering. The OpenGL renderer and ImGui UI exist as stubs, ready for graphics code to be filled in without interference from the simulation core. Parameter hooks for friction, viscosity, surface tension, contact angle, and volume correction are stubbed into the solver interface.
-  </p>
-  <ul>
-    <li>Simulation environment setup: complete</li>
-    <li>Basic droplet physics (surface tension, adhesion): in progress</li>
-    <li>Zero-gravity interactive drag: in progress</li>
-    <li>Vertical glass surface mode: in progress</li>
-    <li>Real-time refractive shading: in progress</li>
-  </ul>
+    <h2>Preliminary Results</h2>
+    <ul>
+        <li>Simulation environment setup: <strong>complete</strong></li>
+        <li>Basic droplet physics (surface tension, adhesion): <strong>complete</strong></li>
+        <li>Zero-gravity interactive drag: <strong>complete</strong></li>
+        <li>Vertical glass surface mode: <strong>complete</strong></li>
+        <li>Real-time refractive shading: <strong>in progress</strong></li>
+    </ul>
+    <h3>
+        A single droplet spawns on a flat plane
+    </h3>
+    <!-- Todo: insert video here -->
+    <iframe width="560" height="315" 
+        src="https://www.youtube.com/embed/gXAw33ghNRE"
+        title="YouTube video player" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen>
+    </iframe>
+    <p>
+        Droplets responds to gravity-like forces and contact angle constraints, and it can be dragged in real time via mouse input. </br>
+        The droplet mesh renders with Phong lighting and its GPU buffers update dynamically each frame. Frame render time and volume error are logged per-frame to CSV. </br>
+        Refractive shading is in progress (the droplet currently renders as a solid lit mesh while the
+        FBO-based composite pass is being completed). </br>
+    </p>
 
-  <h2>Reflection on Progress</h2>
-  <p>
-    Our April 20 milestone target was a working simulation environment, correct water drop behavior, and a basic functioning interactive UI. [Describe your honest status — e.g.: We are on track with the simulation core and interactive interface, though refractive shading is still being finalized. Cross-platform build issues between macOS M1 and Ubuntu consumed approximately X days of additional setup time.]
-  </p>
 
-  <h2>Updated Work Plan</h2>
-  <ul>
-    <li><strong>Apr 20–25:</strong> Complete remaining baseline components (refractive shading, vertical surface with gravity); begin drafting project report; start on physically accurate merging/splitting and real-time caustics.</li>
-    <li><strong>Apr 26–May 2:</strong> Aspiration goals — merging/splitting, caustics, customizable viscosity and friction, non-flat surface support. Finalize deliverable video and project website.</li>
-    <li><strong>May 4:</strong> Final deliverable deadline.</li>
-    <li><strong>May 5:</strong> Presentation.</li>
-  </ul>
+    <h2>Reflection on Progress</h2>
+    <p>
+        Our April 20 milestone target was a working simulation environment, correct water drop behavior,
+        and a basic functioning interactive UI. We have met all of these goals on the physics
+        and interaction side and completed the solver, force fields, surface backends, merge/split, and GPU mesh
+        pipeline. Our next goal is to complete refractive shading composite pass and improve UI controller.
+    </p>
+
+    <h2>Updated Work Plan</h2>
+    <ul>
+        <li><strong>Apr 20–25:</strong> Complete refractive shading (FBO creation, G-buffer pass, full-screen refraction composite shader); wire up Dear ImGui parameter sliders; begin drafting project report.</li>
+        <li><strong>Apr 26–May 2:</strong> Real-time caustics, further merge/split polish, customizable fluid parameters exposed via UI, height-field surface demo. Finalize deliverable video and project website.</li>
+        <li><strong>May 4:</strong> Final deliverable deadline.</li>
+        <li><strong>May 5:</strong> Presentation.</li>
+    </ul>
 
   <div class="deliverables-box">
     <p><strong>Milestone Video:</strong> <a href="YOUR_VIDEO_LINK_HERE" target="_blank">YOUR_VIDEO_LINK_HERE</a></p>
