@@ -13,7 +13,9 @@ from collections import defaultdict
 def normalise(vec):
     """Normalize a vector or array of vectors."""
     norm = np.linalg.norm(vec, axis=-1, keepdims=True)
-    return np.where(norm > 0, vec / norm, vec)
+    out = np.array(vec, copy=True)
+    np.divide(vec, norm, out=out, where=norm > 0)
+    return out
 
 
 def generate_points_on_sphere(n_pts=100, r=1.0):
@@ -802,11 +804,10 @@ def step_simulation(
     max_internal_substeps=8,
     volume_correction_mode="both",
 ):
-    """Unified simulation step wrapper for euler, verlet, and paper modes."""
+    """Unified simulation step wrapper for explicit Euler integration only."""
     if g is None:
         g = np.array([0.0, 0.0, -9.81], dtype=np.float32)
 
-    method = method.lower()
     alpha_eff = alpha if alpha is not None else boundary_alpha
     density_eff = rho if rho is not None else density
 
@@ -815,73 +816,23 @@ def step_simulation(
     else:
         receding_eff, advancing_eff = receding_angle, advancing_angle
 
-    if method == "euler":
-        return step_forward_euler(
-            v,
-            x,
-            faces,
-            neighbours,
-            V_0,
-            dt,
-            g,
-            gamma,
-            mu,
-            eta,
-            k_v,
-            friction_coeff,
-            boundary_alpha=alpha_eff,
-            receding_angle=receding_eff,
-            advancing_angle=advancing_eff,
-            adhesion_dist=adhesion_dist,
-            max_internal_accel=max_internal_accel,
-            density=density_eff,
-        )
-
-    if method == "verlet":
-        return step_verlet(
-            v,
-            x,
-            faces,
-            neighbours,
-            V_0,
-            dt,
-            g,
-            gamma,
-            mu,
-            eta,
-            k_v,
-            friction_coeff,
-            boundary_alpha=alpha_eff,
-            receding_angle=receding_eff,
-            advancing_angle=advancing_eff,
-            adhesion_dist=adhesion_dist,
-            max_internal_accel=max_internal_accel,
-            max_internal_substeps=max_internal_substeps,
-            density=density_eff,
-        )
-
-    if method != "paper":
-        raise ValueError("method must be one of {'euler', 'verlet', 'paper'}")
-
-    x, v = apply_external_forces(x, v, dt, g, friction_coeff)
-
-    x, v = mean_curvature_flow(x, v, faces, dt, gamma, density_eff)
-
-    x, v = contact_angle_operator(
-        x,
+    return step_forward_euler(
         v,
+        x,
         faces,
+        neighbours,
+        V_0,
         dt,
-        alpha=alpha_eff,
-        contact_angles=(receding_eff, advancing_eff),
+        g,
+        gamma,
+        mu,
+        eta,
+        k_v,
+        friction_coeff,
+        boundary_alpha=alpha_eff,
+        receding_angle=receding_eff,
+        advancing_angle=advancing_eff,
+        adhesion_dist=adhesion_dist,
+        max_internal_accel=max_internal_accel,
+        density=density_eff,
     )
-
-    if volume_correction_mode == "local":
-        v = apply_local_volume_correction(x, v, faces, density_eff)
-    elif volume_correction_mode == "global":
-        x = apply_global_volume_correction(x, faces, V_0, dt)
-    elif volume_correction_mode == "both":
-        v = apply_local_volume_correction(x, v, faces, density_eff)
-        x = apply_global_volume_correction(x, faces, V_0, dt, 0.1)
-
-    return v, x
