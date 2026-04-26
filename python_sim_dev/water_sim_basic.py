@@ -13,7 +13,9 @@ from collections import defaultdict
 def normalise(vec):
     """Normalize a vector or array of vectors."""
     norm = np.linalg.norm(vec, axis=-1, keepdims=True)
-    return np.where(norm > 0, vec / norm, vec)
+    out = np.array(vec, copy=True)
+    np.divide(vec, norm, out=out, where=norm > 0)
+    return out
 
 
 def generate_points_on_sphere(n_pts=100, r=1.0):
@@ -141,37 +143,62 @@ def apply_local_volume_correction(x, v, faces):
     return v - (n * a_ave)
 
 
-def apply_global_volume_correction(x, faces, V_initial, fixed_mask=None):
+def apply_global_volume_correction(x, faces, V_initial, ground_mask=None, radial_spread=0.2):
+    """
+    ground_mask: bool array, True for vertices that are on the ground.
+    radial_spread: fraction of d that is used to push ground vertices radially outward.
+    """
     A = compute_lumped_areas(x, faces)
-    if fixed_mask is None:
-        fixed_mask = np.zeros(len(x), dtype=bool)
-    movable = ~fixed_mask
-    total_area = np.sum(A[movable])
+    total_area = np.sum(A)
     if total_area < 1e-8:
         return x
-    # Solve global offset d = DeltaV/A iteratively to avoid overshooting.
+
     x_corr = x.copy()
-    edges = np.vstack((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]))
-    edge_len = np.linalg.norm(x_corr[edges[:, 0]] - x_corr[edges[:, 1]], axis=1)
+    edges = np.vstack((faces[:, [0,1]], faces[:, [1,2]], faces[:, [2,0]]))
+    edge_len = np.linalg.norm(x_corr[edges[:,0]] - x_corr[edges[:,1]], axis=1)
     d_max = 0.15 * max(np.mean(edge_len), 1e-5)
+
+    com = np.mean(x_corr, axis=0)               # centre of mass
     for _ in range(4):
         n, V_current = compute_vertex_normals_and_volume(x_corr, faces)
         delta_V = V_initial - V_current
         if abs(delta_V) < 1e-9:
             break
-        d = float(np.clip(delta_V / total_area, -d_max, d_max))
-        x_corr[movable] += n[movable] * d
+        d = np.clip(delta_V / total_area, -d_max, d_max)
+
+        # Standard displacement along normals
+        disp = d * n
+
+        # Override for ground vertices: allow only horizontal movement
+        if ground_mask is not None:
+            # Horizontal part of the normal (if any)
+            horiz = disp[ground_mask].copy()
+            horiz[:, 2] = 0.0
+            # (Optional) add radial outward component to help base spread
+            if radial_spread > 0:
+                # compute radial direction from COM in XY plane
+                pos = x_corr[ground_mask]
+                r = pos - com
+                r[:, 2] = 0.0
+                r_horiz_norm = np.linalg.norm(r, axis=1, keepdims=True)
+                r_dir = np.divide(r, r_horiz_norm, where=r_horiz_norm>0)
+                # combine: 50% normal's horizontal part, 50% radial outward
+                horiz = 0.5 * horiz + 0.5 * radial_spread * d * r_dir
+            disp[ground_mask] = horiz
+
+        x_corr += disp
+
     return x_corr
 
 
-def apply_implicit_mean_curvature_flow(x, faces, dt, gamma):
+def apply_implicit_mean_curvature_flow(x, faces, dt, gamma, fixed_vertices=None):
     """Paper Eq. (5): implicit mean-curvature-flow positional update."""
+    """Same as before, but vertices where fixed_vertices is True keep their original positions."""
     if gamma <= 0.0:
         return x
     areas = compute_lumped_areas(x, faces)
     L = build_laplacian_matrix(x, faces)
     M = diags(areas)
-    # Our L has negative diagonal / positive off-diagonal, so use M - gamma*dt*L.
     A = (M - (gamma * dt) * L).tocsr()
     x_new = np.zeros_like(x)
     for dim in range(3):
@@ -180,8 +207,9 @@ def apply_implicit_mean_curvature_flow(x, faces, dt, gamma):
         if info != 0 or not np.all(np.isfinite(sol)):
             return x
         x_new[:, dim] = sol
-    if not np.all(np.isfinite(x_new)):
-        return x
+    # Overwrite positions of fixed vertices with original coordinates
+    if fixed_vertices is not None:
+        x_new[fixed_vertices] = x[fixed_vertices]
     return x_new
 
 
@@ -198,11 +226,12 @@ def estimate_mesh_quality(faces, x):
 def step(x, v, faces, neighbours, V_initial, dt):
     # 1. Physics Constants
     g = np.array([0.0, 0.0, -9.81], dtype=np.float32)
-    gamma = 0.05  # Surface tension strength for implicit mean curvature flow
-    mu = 0.2     # Global damping
-    nu = 0.05    # Velocity laplacian (viscosity)
-    nu_extra = 0.30  # Extra viscosity when mesh quality degrades
+    gamma = 0.050 #0.05  # Surface tension strength for implicit mean curvature flow
+    mu = 01.0     # Global damping
+    nu = 0.0    # Velocity laplacian (viscosity)
+    nu_extra = 0.50  # Extra viscosity when mesh quality degrades
     max_speed = 20.0  # Stability guard against runaway integration
+    epsilon = 2  # Ground friction strength
 
     # 2. Geometry
     areas = compute_lumped_areas(x, faces)
@@ -250,8 +279,22 @@ def step(x, v, faces, neighbours, V_initial, dt):
     v_next[collision_mask, 2] = np.maximum(0, v_next[collision_mask, 2])
     v_next[collision_mask, :2] *= 0.5 
     
+    # 8. Ground friction: dampen only tangential (x/y) velocity for particles on the ground.
+    # Use a mask derived from the same population as collision_mask to avoid shape mismatches.
+    friction_mask = collision_mask & (np.linalg.norm(v_next[:, :2], axis=1) > epsilon)
+    friction_scale = np.maximum(0.0, 1.0 - epsilon)
+    v_next[friction_mask, :2] *= friction_scale / np.linalg.norm(v_next[friction_mask, :2], axis=1, keepdims=True)
+    
+    # Mean curvature flow: do NOT move ground vertices
+    x_next = apply_implicit_mean_curvature_flow(x_pred, faces, dt, gamma, fixed_vertices=collision_mask)
+
+
     # 8. Paper Sec. 4.4 global correction as normal-direction positional offset.
-    x_next = apply_global_volume_correction(x_next, faces, V_initial, fixed_mask=collision_mask)
+    # Global volume correction: ground vertices can slide horizontally
+    x_next = apply_global_volume_correction(x_next, faces, V_initial,
+                                            ground_mask=collision_mask,
+                                            radial_spread=0.3)   # tune as needed
+    # Enforce ground plane again (safeguard)
     x_next[collision_mask, 2] = 0.0
     if not np.all(np.isfinite(x_next)) or not np.all(np.isfinite(v_next)):
         return x.copy(), np.zeros_like(v)
