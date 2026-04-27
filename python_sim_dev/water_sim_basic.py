@@ -17,15 +17,18 @@ class WaterSim:
         g=np.array([0.0, 0.0, -9.81], dtype=np.float32),
         gamma=0.5,
         mu=0.3,
-        eta=0.05,
+        nu=0.05,
         k_v=2000.0,
         boundary_alpha=0.5,
         receding_angle=np.deg2rad(70.0),
         advancing_angle=np.deg2rad(95.0),
         adhesion_dist=0.05,
         max_internal_accel=200.0,
+        max_internal_substeps=8,
         density=1.0,
         friction_coeff=0.5,
+        nu_extra=0.5,
+        mesh_quality_threshold=2.6,
     ):
         # Mesh State
         self.x = x
@@ -43,9 +46,13 @@ class WaterSim:
         self.advancing_angle = advancing_angle
         self.adhesion_dist = adhesion_dist
         self.max_internal_accel = max_internal_accel
+        self.max_internal_substeps = max_internal_substeps
         self.density = density
         self.mu = mu
-        self.eta = eta
+        self.nu =nu
+        self.eta = nu
+        self.nu_extra = nu_extra
+        self.mesh_quality_threshold = mesh_quality_threshold
         self.friction_coeff = friction_coeff
 
     @staticmethod
@@ -115,15 +122,15 @@ class WaterSim:
             vertices.append((xs[i], ys[j], zs[k]))
             return vertex_map[key]
 
-        faces = []
+        face_list = []
 
         def add_quad(v00, v10, v11, v01, flip=False):
             if flip:
-                faces.append((v00, v11, v10))
-                faces.append((v00, v01, v11))
+                face_list.append((v00, v11, v10))
+                face_list.append((v00, v01, v11))
             else:
-                faces.append((v00, v10, v11))
-                faces.append((v00, v11, v01))
+                face_list.append((v00, v10, v11))
+                face_list.append((v00, v11, v01))
 
         for j in range(ny - 1):
             for i in range(nx - 1):
@@ -177,7 +184,7 @@ class WaterSim:
                 )
 
         x = np.asarray(vertices, dtype=np.float32)
-        faces = np.asarray(faces, dtype=np.int32)
+        faces = np.asarray(face_list, dtype=np.int32)
 
         neighbours = {i: set() for i in range(len(x))}
         for tri in faces:
@@ -263,21 +270,22 @@ class WaterSim:
 
     def compute_lumped_masses(self, x):
         """Compute lumped mass matrix for triangular mesh."""
-        n_vertices = len(x)
-        masses = np.zeros(n_vertices, dtype=np.float32)
+        return self.compute_lumped_areas(x) * self.density
 
-        def triangle_area(a, b, c):
-            return 0.5 * np.linalg.norm(np.cross(b - a, c - a))
+    def compute_lumped_areas(self, x):
+        """Compute lumped area matrix for triangular mesh."""
+        n_vertices = len(x)
+        areas = np.zeros(n_vertices, dtype=np.float32)
 
         for i in range(n_vertices):
-            vertex_mass = 0.0
+            vertex_area = 0.0
             for face in self.faces:
                 if i in face:
                     a, b, c = x[face[0]], x[face[1]], x[face[2]]
-                    vertex_mass += triangle_area(a, b, c) / 3.0
-            masses[i] = self.density * vertex_mass
+                    vertex_area += 0.5 * np.linalg.norm(np.cross(b - a, c - a)) / 3.0
+            areas[i] = vertex_area
 
-        return masses
+        return areas
 
     def build_laplacian_matrix(self, n_vertices, cotangent_weights):
         """Build discrete Laplace-Beltrami operator as sparse matrix."""
@@ -419,11 +427,36 @@ class WaterSim:
             return 1e-3
         return float(np.median(edges))
 
+    def estimate_mesh_quality(self, x):
+        """Returns max_edge_len / mean_edge_len; higher means more stretched triangles."""
+        if len(self.faces) == 0:
+            return 1.0
+        edges = np.vstack(
+            (self.faces[:, [0, 1]], self.faces[:, [1, 2]], self.faces[:, [2, 0]])
+        )
+        edge_len = np.linalg.norm(x[edges[:, 0]] - x[edges[:, 1]], axis=1)
+        mean_len = np.mean(edge_len)
+        if mean_len < 1e-8:
+            return 1.0
+        return float(np.max(edge_len) / mean_len)
+
+    def compute_dynamic_eta(self, x):
+        """Increase viscosity compensation when the mesh quality degrades."""
+        quality = self.estimate_mesh_quality(x)
+        if quality <= self.mesh_quality_threshold:
+            return self.eta
+        excess = (quality - self.mesh_quality_threshold) / max(
+            self.mesh_quality_threshold, 1e-8
+        )
+        self.eta = self.nu + self.nu_extra * min(1.0, excess)
+        return self.eta
+
     def step_forward_euler(self, dt):
         """Advances the simulation by one explicit Euler time step."""
         a_total, delta_v = self.compute_total_acceleration(self.x, self.v)
+        eta_eff = self.compute_dynamic_eta(self.x)
 
-        v_damped = (self.v + (self.eta * dt * delta_v)) / (1.0 + self.mu * dt)
+        v_damped = (self.v + (eta_eff * dt * delta_v)) / (1.0 + self.mu * dt)
         v_new = np.clip(v_damped + a_total * dt, -15.0, 15.0)
         x_new = self.x + v_new * dt
         x_new, v_new = self.apply_surface_interactions(x_new, v_new, dt)
@@ -434,8 +467,9 @@ class WaterSim:
     def step_forward_verlet(self, dt):
         """Advances the simulation by one explicit Verlet time step."""
         a_total, delta_v = self.compute_total_acceleration(self.x, self.v)
+        eta_eff = self.compute_dynamic_eta(self.x)
 
-        v_damped = (self.v + (self.eta * dt * delta_v)) / (1.0 + self.mu * dt)
+        v_damped = (self.v + (eta_eff * dt * delta_v)) / (1.0 + self.mu * dt)
         v_new = v_damped + a_total * dt
         # x_new = self.x + 0.5 * dt * (self.v + v_new)
         x_new = self.x + v_new * dt + dt * dt * 0.5 * a_total
@@ -464,10 +498,11 @@ class WaterSim:
 
         for _ in range(internal_substeps):
             a_n, delta_v_n = self.compute_total_acceleration(x_curr, v_curr)
+            eta_eff = self.compute_dynamic_eta(x_curr)
 
             damp_half = 1.0 + 0.5 * self.mu * dt_sub
             v_half = (
-                v_curr + 0.5 * dt_sub * a_n + 0.5 * self.eta * dt_sub * delta_v_n
+                v_curr + 0.5 * dt_sub * a_n + 0.5 * eta_eff * dt_sub * delta_v_n
             ) / damp_half
             v_half = np.nan_to_num(v_half, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -477,7 +512,7 @@ class WaterSim:
             a_np1, delta_v_np1 = self.compute_total_acceleration(x_next, v_half)
 
             v_next = (
-                v_half + 0.5 * dt_sub * a_np1 + 0.5 * self.eta * dt_sub * delta_v_np1
+                v_half + 0.5 * dt_sub * a_np1 + 0.5 * eta_eff * dt_sub * delta_v_np1
             ) / damp_half
             v_next = np.clip(
                 np.nan_to_num(v_next, nan=0.0, posinf=0.0, neginf=0.0), -15.0, 15.0
@@ -584,56 +619,116 @@ class WaterSim:
         self.x, self.v = x_new, v_new
         return self.x, self.v
 
-    def apply_local_volume_correction(self):
-        """Local volume correction to preserve details."""
+    def apply_local_volume_correction(self, velocity=None):
+        """Remove area-weighted mean normal velocity from a velocity field."""
+        if velocity is None:
+            velocity = self.v
+            update_state = True
+        else:
+            update_state = False
+
         n, _ = self.compute_vertex_normals_and_volume(self.x)
-        masses = self.compute_lumped_masses(self.x)
+        areas = self.compute_lumped_areas(self.x)
+        vn = np.sum(velocity * n, axis=1)
+        total_area = np.sum(areas)
+        if total_area < 1e-8:
+            return velocity
+        a_ave = np.sum(areas * vn) / total_area
+        corrected = velocity - (n * a_ave)
+        if update_state:
+            self.v = corrected
+        return corrected
 
-        u = self.v.copy()
-        a_i = np.sum(u * n, axis=1)
-
-        a_bar = np.zeros(len(self.x))
-        for i in range(len(self.x)):
-            area_sum = 0.0
-            weighted_sum = 0.0
-            for j in self.neighbours[i]:
-                area = masses[j]
-                weighted_sum += area * a_i[j]
-                area_sum += area
-            if area_sum > 1e-8:
-                a_bar[i] = weighted_sum / area_sum
-
-        self.v = u - a_bar[:, None] * n
-        return self.v
-
-    def apply_global_volume_correction(self, V_target, dt, volume_stiffness=1.0):
-        """Global volume correction."""
-        n, V = self.compute_vertex_normals_and_volume(self.x)
-
-        delta_V = V_target - V
-        if abs(delta_V) < 1e-10:
-            return self.x
-
-        total_area = 0.0
-        for face in self.faces:
-            x0, x1, x2 = self.x[face[0]], self.x[face[1]], self.x[face[2]]
-            total_area += 0.5 * np.linalg.norm(np.cross(x1 - x0, x2 - x0))
-
+    def apply_global_volume_correction(
+        self,
+        ground_mask=None,
+        radial_spread=0.0,
+        iterations=4,
+        volume_stiffness=0.2,
+    ):
+        """Correct global volume by moving vertices along normals with safeguards."""
+        areas = self.compute_lumped_areas(self.x)
+        total_area = np.sum(areas)
         if total_area < 1e-8:
             return self.x
 
+        x_corr = self.x.copy()
+        edges = np.vstack(
+            (self.faces[:, [0, 1]], self.faces[:, [1, 2]], self.faces[:, [2, 0]])
+        )
+        edge_len = np.linalg.norm(x_corr[edges[:, 0]] - x_corr[edges[:, 1]], axis=1)
+        d_max = 0.15 * max(np.mean(edge_len), 1e-5)
         stiffness = np.clip(volume_stiffness, 0.0, 1.0)
-        d = stiffness * (delta_V / total_area)
 
-        self.x = self.x + d * n
+        for _ in range(iterations):
+            n, v_current = self.compute_vertex_normals_and_volume(x_corr)
+            delta_v = self.V_0 - v_current
+            if abs(delta_v) < 1e-9:
+                break
+
+            d = stiffness * (delta_v / total_area)
+            d = np.clip(d, -d_max, d_max)
+            disp = d * n
+
+            if ground_mask is not None and np.any(ground_mask):
+                com = np.mean(x_corr, axis=0)
+                horiz = disp[ground_mask].copy()
+                horiz[:, 2] = 0.0
+                if radial_spread > 0.0:
+                    pos = x_corr[ground_mask]
+                    r = pos - com
+                    r[:, 2] = 0.0
+                    r_norm = np.linalg.norm(r, axis=1, keepdims=True)
+                    r_dir = np.divide(
+                        r, r_norm, out=np.zeros_like(r), where=r_norm > 1e-8
+                    )
+                    horiz = 0.5 * horiz + 0.5 * radial_spread * d * r_dir
+                disp[ground_mask] = horiz
+
+            x_corr = x_corr + disp
+
+        self.x = x_corr
         return self.x
 
     def step_simulation(self, dt, method="euler", volume_correction_mode="both"):
         """Unified simulation step wrapper prioritizing configured properties."""
         if method == "euler":
-            return self.step_forward_euler(dt)
+            self.step_forward_euler(dt)
         elif method == "verlet":
             # return self.step_verlet(dt)
-            return self.step_forward_verlet(dt)
+            self.step_forward_verlet(dt)
         else:
             raise ValueError(f"Unknown integration method: {method}")
+
+        # Scale global correction for small droplets to avoid over-correction.
+        volume_scale = np.clip(self.V_0 / 1e-2, 0.1, 1.0)
+        ground_mask = self.x[:, 2] <= self.adhesion_dist
+
+        # Apply requested volume correction after the integration step.
+        if volume_correction_mode == "local":
+            v_trans = np.mean(self.v, axis=0)
+            v_rel = self.v - v_trans
+            self.v = self.apply_local_volume_correction(velocity=v_rel) + v_trans
+        elif volume_correction_mode == "global":
+            self.apply_global_volume_correction(
+                ground_mask=ground_mask,
+                radial_spread=0.0,
+                volume_stiffness=0.2 * volume_scale,
+            )
+            self.x, self.v = self.apply_surface_interactions(self.x, self.v, dt)
+        elif volume_correction_mode == "both":
+            v_trans = np.mean(self.v, axis=0)
+            v_rel = self.v - v_trans
+            self.v = self.apply_local_volume_correction(velocity=v_rel) + v_trans
+            self.apply_global_volume_correction(
+                ground_mask=ground_mask,
+                radial_spread=0.0,
+                volume_stiffness=0.2 * volume_scale,
+            )
+            self.x, self.v = self.apply_surface_interactions(self.x, self.v, dt)
+        elif volume_correction_mode != "none":
+            raise ValueError(
+                "volume_correction_mode must be one of {'none', 'local', 'global', 'both'}"
+            )
+
+        return self.v, self.x
