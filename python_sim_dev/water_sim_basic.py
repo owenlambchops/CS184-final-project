@@ -1,10 +1,15 @@
-import copy
+# -*- coding: utf-8 -*-
+"""
+Real-Time Interactive Water Droplets (Euler & Advanced Damping)
+Simulates a deformable water droplet on a surface using Vertex Dynamics.
+"""
+
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-from matplotlib.animation import FuncAnimation
 from collections import defaultdict
 
 
@@ -15,9 +20,7 @@ def normalise(vec):
 
 
 def generate_points_on_sphere(n_pts=100, r=1.0):
-    """generates a uniformly distributed set of points on the surface of a sphere using the Fibonacci method.
-    https://extremelearning.com.au/how-to-evenly-distribute-points-on-a-sphere-more-effectively-than-the-canonical-fibonacci-lattice/
-    """
+    """Generates a uniformly distributed set of points on the surface of a sphere."""
     goldenRatio = (1 + np.sqrt(5)) / 2
     idx = np.linspace(0, n_pts - 1, n_pts)
     theta = 2 * np.pi * idx / goldenRatio
@@ -42,159 +45,6 @@ def generate_polyhedron(n_vertices=40, radius=1.0):
             neighbours[j].add(i)
 
     return x, faces, {i: sorted(list(nbs)) for i, nbs in neighbours.items()}
-
-
-def generate_rectangular_cube_mesh(
-    width=1.0,
-    height=1.0,
-    length=1.0,
-    nx=5,
-    ny=5,
-    nz=5,
-    center=(0.0, 0.0, 0.0),
-):
-    """Generates a triangulated rectangular cuboid surface mesh.
-
-    Axis convention:
-        - width along X
-        - length along Y
-        - height along Z
-
-    Args:
-        width (float): Cuboid size along X.
-        height (float): Cuboid size along Z.
-        length (float): Cuboid size along Y.
-        nx (int): Boundary resolution along X (must be >= 2).
-        ny (int): Boundary resolution along Y (must be >= 2).
-        nz (int): Boundary resolution along Z (must be >= 2).
-        center (tuple[float, float, float]): Cuboid center in 3D.
-
-    Returns:
-        tuple: (x, faces, neighbours)
-            x: (N, 3) float32 vertex positions.
-            faces: (M, 3) int32 triangle indices.
-            neighbours: dict[int, list[int]] adjacency list.
-    """
-    if nx < 2 or ny < 2 or nz < 2:
-        raise ValueError("nx, ny, nz must all be at least 2")
-
-    cx, cy, cz = center
-    xs = np.linspace(cx - width * 0.5, cx + width * 0.5, nx, dtype=np.float32)
-    ys = np.linspace(cy - length * 0.5, cy + length * 0.5, ny, dtype=np.float32)
-    zs = np.linspace(cz - height * 0.5, cz + height * 0.5, nz, dtype=np.float32)
-
-    vertex_map = {}
-    vertices = []
-
-    def is_boundary(i, j, k):
-        return i == 0 or i == nx - 1 or j == 0 or j == ny - 1 or k == 0 or k == nz - 1
-
-    def vid(i, j, k):
-        key = (i, j, k)
-        if key in vertex_map:
-            return vertex_map[key]
-        if not is_boundary(i, j, k):
-            raise ValueError("Requested an interior vertex for a surface mesh")
-        vertex_map[key] = len(vertices)
-        vertices.append((xs[i], ys[j], zs[k]))
-        return vertex_map[key]
-
-    faces = []
-
-    def add_quad(v00, v10, v11, v01, flip=False):
-        if flip:
-            faces.append((v00, v11, v10))
-            faces.append((v00, v01, v11))
-        else:
-            faces.append((v00, v10, v11))
-            faces.append((v00, v11, v01))
-
-    # Z-min and Z-max faces
-    for j in range(ny - 1):
-        for i in range(nx - 1):
-            add_quad(
-                vid(i, j, 0),
-                vid(i + 1, j, 0),
-                vid(i + 1, j + 1, 0),
-                vid(i, j + 1, 0),
-                flip=True,
-            )
-            add_quad(
-                vid(i, j, nz - 1),
-                vid(i + 1, j, nz - 1),
-                vid(i + 1, j + 1, nz - 1),
-                vid(i, j + 1, nz - 1),
-                flip=False,
-            )
-
-    # Y-min and Y-max faces
-    for k in range(nz - 1):
-        for i in range(nx - 1):
-            add_quad(
-                vid(i, 0, k),
-                vid(i + 1, 0, k),
-                vid(i + 1, 0, k + 1),
-                vid(i, 0, k + 1),
-                flip=False,
-            )
-            add_quad(
-                vid(i, ny - 1, k),
-                vid(i + 1, ny - 1, k),
-                vid(i + 1, ny - 1, k + 1),
-                vid(i, ny - 1, k + 1),
-                flip=True,
-            )
-
-    # X-min and X-max faces
-    for k in range(nz - 1):
-        for j in range(ny - 1):
-            add_quad(
-                vid(0, j, k),
-                vid(0, j + 1, k),
-                vid(0, j + 1, k + 1),
-                vid(0, j, k + 1),
-                flip=True,
-            )
-            add_quad(
-                vid(nx - 1, j, k),
-                vid(nx - 1, j + 1, k),
-                vid(nx - 1, j + 1, k + 1),
-                vid(nx - 1, j, k + 1),
-                flip=False,
-            )
-
-    x = np.asarray(vertices, dtype=np.float32)
-    faces = np.asarray(faces, dtype=np.int32)
-
-    neighbours = {i: set() for i in range(len(x))}
-    for tri in faces:
-        for k in range(3):
-            i = int(tri[k])
-            j = int(tri[(k + 1) % 3])
-            neighbours[i].add(j)
-            neighbours[j].add(i)
-
-    return x, faces, {i: sorted(list(nbs)) for i, nbs in neighbours.items()}
-
-
-def generate_rectangle_mesh(
-    width=1.0,
-    height=1.0,
-    nx=20,
-    ny=20,
-    center=(0.0, 0.0, 0.0),
-):
-    """Backward-compatible wrapper that now generates a thin cuboid mesh."""
-    thickness = min(width, height) * 0.05
-    return generate_rectangular_cube_mesh(
-        width=width,
-        height=thickness,
-        length=height,
-        nx=nx,
-        ny=ny,
-        nz=2,
-        center=center,
-    )
 
 
 def compute_cotangent_weights(x, faces):
@@ -277,28 +127,29 @@ def compute_laplacians(x, v, neighbours, w):
 
 def apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist):
     """Handles Z=0 plane collisions, boundary constraints, and sliding friction."""
-    x = x.copy()
-    v = v.copy()
+    x_new = x.copy()
+    v_new = v.copy()
 
-    for i in range(len(x)):
-        if x[i][2] <= adhesion_dist:
-            if x[i][2] < 0:
-                x[i][2] = 0
-                if v[i][2] < 0:
-                    v[i][2] *= -0.2
+    for i in range(len(x_new)):
+        if x_new[i][2] <= adhesion_dist:
+            if x_new[i][2] < 0:
+                x_new[i][2] = 0
+                if v_new[i][2] < 0:
+                    v_new[i][2] *= -0.2
 
-            v_horiz = v[i][:2]
+            v_horiz = v_new[i][:2]
             speed = np.linalg.norm(v_horiz)
             if speed > 0:
                 drop = friction_coeff * dt
                 if speed < drop:
-                    v[i][:2] = 0.0
+                    v_new[i][:2] = 0.0
                 else:
-                    v[i][:2] *= (speed - drop) / speed
+                    v_new[i][:2] *= (speed - drop) / speed
 
-            v[i][:2] = (1 - 0.05 * dt) * v[i][:2]
+            # Additional surface slip drag
+            v_new[i][:2] = (1 - 0.05 * dt) * v_new[i][:2]
 
-    return x, v
+    return x_new, v_new
 
 
 def boundary_force(
@@ -356,6 +207,7 @@ def compute_total_acceleration(
     adhesion_dist,
     max_internal_accel,
     density,
+    damping_gain=1.0,
 ):
     """Computes total acceleration and velocity Laplacian for a given state."""
     w = compute_cotangent_weights(x, faces)
@@ -405,6 +257,7 @@ def step_forward_euler(
     adhesion_dist=0.05,
     max_internal_accel=200.0,
     density=1.0,
+    damping_gain=1.0,
 ):
     """Advances the simulation by one explicit Euler time step."""
     a_total, delta_v = compute_total_acceleration(
@@ -422,11 +275,29 @@ def step_forward_euler(
         adhesion_dist,
         max_internal_accel,
         density,
+        damping_gain=damping_gain,
     )
 
-    v_damped = (v + (eta * dt * delta_v)) / (1.0 + mu * dt)
+    # Base viscosity and regular damping combination
+    v_damped = (1.0 - mu * dt) * v + (eta * dt) * delta_v
+    
+    # Energy-aware damping: linear damping + quadratic drag to kill oscillations over time.
+    speed = np.linalg.norm(v, axis=1, keepdims=True)
+    lin = np.maximum(0.0, mu) * float(damping_gain)
+    quad = (0.2 + 0.3 * np.maximum(0.0, eta)) * float(damping_gain)
+    damping = 1.0 / (1.0 + lin * dt + quad * speed * dt)
+
+    # Apply the computed damping scaling to v_damped
+    v_damped = v_damped * damping
+
+    # Residual global damping in low-speed regime to ensure eventual settling.
+    mean_speed = float(np.mean(speed))
+    if mean_speed < 0.25:
+        v_damped *= max(0.0, 1.0 - 0.3 * dt * float(damping_gain))
+
     v_new = np.clip(v_damped + a_total * dt, -15.0, 15.0)
     x_new = x + v_new * dt
+    
     x_new, v_new = apply_surface_interactions(
         x_new, v_new, dt, friction_coeff, adhesion_dist
     )
@@ -456,6 +327,7 @@ def step_simulation(
     contact_angles=None,
     adhesion_dist=0.05,
     max_internal_accel=200.0,
+    damping_gain=1.0,
 ):
     """Unified simulation step wrapper for euler mode."""
     if g is None:
@@ -488,4 +360,5 @@ def step_simulation(
         adhesion_dist=adhesion_dist,
         max_internal_accel=max_internal_accel,
         density=density_eff,
+        damping_gain=damping_gain,
     )
