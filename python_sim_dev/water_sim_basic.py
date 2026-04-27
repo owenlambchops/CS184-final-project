@@ -2,8 +2,6 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
-from scipy.sparse.linalg import cg
-from scipy.sparse import csr_matrix, eye as sparse_eye, diags
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.animation import FuncAnimation
@@ -236,68 +234,6 @@ def compute_cotangent_weights(x, faces):
 
 
 def compute_vertex_normals_and_volume(x, faces):
-    """Calculate vertex normals and internal volume."""
-    n = np.zeros_like(x)
-    V = 0.0
-    com = np.mean(x, axis=0)
-
-    for i0, i1, i2 in faces:
-        x0, x1, x2 = x[i0], x[i1], x[i2]
-        n_face = np.cross(x1 - x0, x2 - x0)
-
-        if np.dot(n_face, x0 - com) < 0:
-            n_face, x1, x2 = -n_face, x2, x1
-
-        n[i0] += n_face
-        n[i1] += n_face
-        n[i2] += n_face
-        V += np.dot(x0 - com, np.cross(x1 - com, x2 - com)) / 6.0
-
-    norms = np.linalg.norm(n, axis=1, keepdims=True)
-    return n / np.where(norms == 0, 1.0, norms), abs(V)
-
-
-def compute_lumped_masses(x, faces, rho=1.0):
-    """Compute lumped mass matrix for triangular mesh."""
-    n_vertices = len(x)
-    masses = np.zeros(n_vertices, dtype=np.float32)
-
-    def triangle_area(a, b, c):
-        return 0.5 * np.linalg.norm(np.cross(b - a, c - a))
-
-    for i in range(n_vertices):
-        vertex_mass = 0.0
-        for face in faces:
-            if i in face:
-                a = x[face[0]]
-                b = x[face[1]]
-                c = x[face[2]]
-                vertex_mass += triangle_area(a, b, c) / 3.0
-        masses[i] = rho * vertex_mass
-
-    return masses
-
-
-def build_laplacian_matrix(n_vertices, faces, cotangent_weights):
-    """Build discrete Laplace-Beltrami operator as sparse matrix."""
-    row, col, data = [], [], []
-
-    for i in range(n_vertices):
-        row_sum = 0.0
-        for j in cotangent_weights[i]:
-            w = cotangent_weights[i][j]
-            row.append(i)
-            col.append(j)
-            data.append(w)
-            row_sum += w
-        row.append(i)
-        col.append(i)
-        data.append(-row_sum)
-
-    return csr_matrix((data, (row, col)), shape=(n_vertices, n_vertices))
-
-
-def compute_vertex_normals_and_volume(x, faces):
     """Calculates vertex normals (n_i) and the exact internal volume (V) of the mesh."""
     n = np.zeros_like(x)
     V = 0.0
@@ -450,21 +386,6 @@ def compute_total_acceleration(
     return a_total, delta_v
 
 
-def compute_reference_edge_length(x, faces):
-    """Returns a robust characteristic edge length for adaptive time stepping."""
-    if len(faces) == 0:
-        return 1e-3
-
-    e01 = np.linalg.norm(x[faces[:, 0]] - x[faces[:, 1]], axis=1)
-    e12 = np.linalg.norm(x[faces[:, 1]] - x[faces[:, 2]], axis=1)
-    e20 = np.linalg.norm(x[faces[:, 2]] - x[faces[:, 0]], axis=1)
-    edges = np.concatenate((e01, e12, e20))
-    edges = edges[edges > 1e-8]
-    if edges.size == 0:
-        return 1e-3
-    return float(np.median(edges))
-
-
 def step_forward_euler(
     v,
     x,
@@ -513,269 +434,6 @@ def step_forward_euler(
     return v_new, x_new
 
 
-def step_verlet(
-    v,
-    x,
-    faces,
-    neighbours,
-    V_0,
-    dt,
-    g,
-    gamma,
-    mu,
-    eta,
-    k_v,
-    friction_coeff,
-    boundary_alpha=0.5,
-    receding_angle=np.deg2rad(70.0),
-    advancing_angle=np.deg2rad(95.0),
-    adhesion_dist=0.05,
-    max_internal_accel=200.0,
-    max_internal_substeps=8,
-    density=1.0,
-):
-    """Advances the simulation by one velocity-Verlet time step."""
-    edge_len = compute_reference_edge_length(x, faces)
-    a_probe, _ = compute_total_acceleration(
-        x,
-        v,
-        faces,
-        neighbours,
-        V_0,
-        g,
-        gamma,
-        k_v,
-        boundary_alpha,
-        receding_angle,
-        advancing_angle,
-        adhesion_dist,
-        max_internal_accel,
-        density,
-    )
-    a_max = float(np.max(np.linalg.norm(a_probe, axis=1)))
-    if a_max > 1e-8:
-        dt_safe = 0.35 * np.sqrt(edge_len / a_max)
-        internal_substeps = int(
-            np.clip(np.ceil(dt / max(dt_safe, 1e-6)), 1, max_internal_substeps)
-        )
-    else:
-        internal_substeps = 1
-
-    dt_sub = dt / internal_substeps
-    x_curr = x.copy()
-    v_curr = v.copy()
-
-    for _ in range(internal_substeps):
-        a_n, delta_v_n = compute_total_acceleration(
-            x_curr,
-            v_curr,
-            faces,
-            neighbours,
-            V_0,
-            g,
-            gamma,
-            k_v,
-            boundary_alpha,
-            receding_angle,
-            advancing_angle,
-            adhesion_dist,
-            max_internal_accel,
-            density,
-        )
-
-        damp_half = 1.0 + 0.5 * mu * dt_sub
-        v_half = (
-            v_curr + 0.5 * dt_sub * a_n + 0.5 * eta * dt_sub * delta_v_n
-        ) / damp_half
-        v_half = np.nan_to_num(v_half, nan=0.0, posinf=0.0, neginf=0.0)
-
-        x_next = x_curr + dt_sub * v_half
-        x_next = np.nan_to_num(x_next, nan=0.0, posinf=0.0, neginf=0.0)
-
-        a_np1, delta_v_np1 = compute_total_acceleration(
-            x_next,
-            v_half,
-            faces,
-            neighbours,
-            V_0,
-            g,
-            gamma,
-            k_v,
-            boundary_alpha,
-            receding_angle,
-            advancing_angle,
-            adhesion_dist,
-            max_internal_accel,
-            density,
-        )
-
-        v_next = (
-            v_half + 0.5 * dt_sub * a_np1 + 0.5 * eta * dt_sub * delta_v_np1
-        ) / damp_half
-        v_next = np.clip(
-            np.nan_to_num(v_next, nan=0.0, posinf=0.0, neginf=0.0), -15.0, 15.0
-        )
-
-        x_next, v_next = apply_surface_interactions(
-            x_next, v_next, dt_sub, friction_coeff, adhesion_dist
-        )
-
-        x_curr = x_next
-        v_curr = v_next
-
-    return v_curr, x_curr
-
-
-def apply_external_forces(x, v, dt, g, friction_coeff=0.5):
-    """Apply gravity, collision, and friction."""
-    x_new = x.copy()
-    v_new = v.copy()
-
-    v_new = v_new + g * dt
-
-    x_new = x_new + v_new * dt
-
-    contact_band = 0.05
-    colliding = x_new[:, 2] < contact_band
-    x_new[colliding, 2] = np.maximum(x_new[colliding, 2], 0.0)
-
-    colliding_ids = np.where(colliding)[0]
-    downward_ids = colliding_ids[v_new[colliding_ids, 2] < 0]
-    v_new[downward_ids, 2] *= -0.1
-
-    v_horiz = v_new[colliding, :2]
-    speed = np.linalg.norm(v_horiz, axis=1, keepdims=True)
-    drop = friction_coeff * dt
-    mask = speed > drop
-    v_new[colliding, :2] = np.where(mask, v_horiz * (1 - drop / speed), 0.0)
-
-    return x_new, v_new
-
-
-def mean_curvature_flow(
-    x, v, faces, dt, gamma=0.5, rho=1.0, max_iterations=100, tol=1e-6
-):
-    """Apply mean curvature flow using implicit integration."""
-    n_vertices = len(x)
-
-    w = compute_cotangent_weights(x, faces)
-    L = build_laplacian_matrix(n_vertices, faces, w)
-    masses = compute_lumped_masses(x, faces, rho)
-    M_inv = diags(1.0 / np.maximum(masses, 1e-8))
-
-    I = sparse_eye(n_vertices)
-    A = I + gamma * dt * M_inv @ L
-
-    x_new = x.copy()
-    for dim in range(3):
-        b = x[:, dim]
-        x_new[:, dim], info = cg(A, b, x0=x[:, dim], maxiter=max_iterations, rtol=tol)
-
-    v_new = (x_new - x) / dt
-
-    return x_new, v_new
-
-
-def contact_angle_operator(x, v, faces, dt, alpha=0.5, contact_angles=None):
-    """Apply contact angle constraint at ground level."""
-    if contact_angles is None:
-        receding_angle = np.deg2rad(70.0)
-        advancing_angle = np.deg2rad(95.0)
-    else:
-        receding_angle, advancing_angle = contact_angles
-
-    x_new = x.copy()
-    v_new = v.copy()
-
-    contact_band = 0.05
-    contact_mask = x[:, 2] <= contact_band
-
-    if np.any(contact_mask):
-        n, _ = compute_vertex_normals_and_volume(x, faces)
-        ground_normal = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-
-        contact_ids = np.where(contact_mask)[0]
-        for i in contact_ids:
-            n_i = n[i]
-            dot_val = np.clip(np.dot(n_i, ground_normal), -1.0, 1.0)
-            angle = np.arccos(dot_val)
-
-            n_p = n_i - dot_val * ground_normal
-            n_p_norm = np.linalg.norm(n_p)
-
-            if n_p_norm > 1e-6:
-                n_p_dir = n_p / n_p_norm
-
-                if angle < receding_angle:
-                    f = alpha * (angle - receding_angle) * n_p_dir
-                    x_new[i] += f * dt
-                    v_new[i] += f / max(0.01, np.linalg.norm(v[i]) + 1e-8)
-                elif angle > advancing_angle:
-                    f = alpha * (angle - advancing_angle) * n_p_dir
-                    x_new[i] += f * dt
-                    v_new[i] += f / max(0.01, np.linalg.norm(v[i]) + 1e-8)
-
-    return x_new, v_new
-
-
-def apply_local_volume_correction(x, v, faces, rho=1.0):
-    """Local volume correction to preserve details."""
-    n, _ = compute_vertex_normals_and_volume(x, faces)
-    w = compute_cotangent_weights(x, faces)
-
-    masses = compute_lumped_masses(x, faces, rho)
-
-    u = v.copy()
-
-    a_i = np.sum(u * n, axis=1)
-
-    neighbours = {i: set() for i in range(len(x))}
-    for face in faces:
-        for k in range(3):
-            i = int(face[k])
-            j = int(face[(k + 1) % 3])
-            neighbours[i].add(j)
-            neighbours[j].add(i)
-
-    a_bar = np.zeros(len(x))
-    for i in range(len(x)):
-        area_sum = 0.0
-        weighted_sum = 0.0
-        for j in neighbours[i]:
-            area = masses[j]
-            weighted_sum += area * a_i[j]
-            area_sum += area
-        if area_sum > 1e-8:
-            a_bar[i] = weighted_sum / area_sum
-
-    u_corrected = u - a_bar[:, None] * n
-
-    return u_corrected
-
-
-def apply_global_volume_correction(x, faces, V_target, dt, volume_stiffness=1.0):
-    """Global volume correction."""
-    n, V = compute_vertex_normals_and_volume(x, faces)
-
-    delta_V = V_target - V
-    if abs(delta_V) < 1e-10:
-        return x
-
-    total_area = 0.0
-    for face in faces:
-        x0, x1, x2 = x[face[0]], x[face[1]], x[face[2]]
-        total_area += 0.5 * np.linalg.norm(np.cross(x1 - x0, x2 - x0))
-
-    if total_area < 1e-8:
-        return x
-
-    stiffness = np.clip(volume_stiffness, 0.0, 1.0)
-    d = stiffness * (delta_V / total_area)
-
-    x_corrected = x + d * n
-    return x_corrected
-
-
 def step_simulation(
     v,
     x,
@@ -783,7 +441,6 @@ def step_simulation(
     neighbours,
     V_0,
     dt,
-    method="euler",
     g=None,
     gamma=0.5,
     mu=0.3,
@@ -799,14 +456,11 @@ def step_simulation(
     contact_angles=None,
     adhesion_dist=0.05,
     max_internal_accel=200.0,
-    max_internal_substeps=8,
-    volume_correction_mode="both",
 ):
-    """Unified simulation step wrapper for euler, verlet, and paper modes."""
+    """Unified simulation step wrapper for euler mode."""
     if g is None:
         g = np.array([0.0, 0.0, -9.81], dtype=np.float32)
 
-    method = method.lower()
     alpha_eff = alpha if alpha is not None else boundary_alpha
     density_eff = rho if rho is not None else density
 
@@ -815,73 +469,23 @@ def step_simulation(
     else:
         receding_eff, advancing_eff = receding_angle, advancing_angle
 
-    if method == "euler":
-        return step_forward_euler(
-            v,
-            x,
-            faces,
-            neighbours,
-            V_0,
-            dt,
-            g,
-            gamma,
-            mu,
-            eta,
-            k_v,
-            friction_coeff,
-            boundary_alpha=alpha_eff,
-            receding_angle=receding_eff,
-            advancing_angle=advancing_eff,
-            adhesion_dist=adhesion_dist,
-            max_internal_accel=max_internal_accel,
-            density=density_eff,
-        )
-
-    if method == "verlet":
-        return step_verlet(
-            v,
-            x,
-            faces,
-            neighbours,
-            V_0,
-            dt,
-            g,
-            gamma,
-            mu,
-            eta,
-            k_v,
-            friction_coeff,
-            boundary_alpha=alpha_eff,
-            receding_angle=receding_eff,
-            advancing_angle=advancing_eff,
-            adhesion_dist=adhesion_dist,
-            max_internal_accel=max_internal_accel,
-            max_internal_substeps=max_internal_substeps,
-            density=density_eff,
-        )
-
-    if method != "paper":
-        raise ValueError("method must be one of {'euler', 'verlet', 'paper'}")
-
-    x, v = apply_external_forces(x, v, dt, g, friction_coeff)
-
-    x, v = mean_curvature_flow(x, v, faces, dt, gamma, density_eff)
-
-    x, v = contact_angle_operator(
-        x,
+    return step_forward_euler(
         v,
+        x,
         faces,
+        neighbours,
+        V_0,
         dt,
-        alpha=alpha_eff,
-        contact_angles=(receding_eff, advancing_eff),
+        g,
+        gamma,
+        mu,
+        eta,
+        k_v,
+        friction_coeff,
+        boundary_alpha=alpha_eff,
+        receding_angle=receding_eff,
+        advancing_angle=advancing_eff,
+        adhesion_dist=adhesion_dist,
+        max_internal_accel=max_internal_accel,
+        density=density_eff,
     )
-
-    if volume_correction_mode == "local":
-        v = apply_local_volume_correction(x, v, faces, density_eff)
-    elif volume_correction_mode == "global":
-        x = apply_global_volume_correction(x, faces, V_0, dt)
-    elif volume_correction_mode == "both":
-        v = apply_local_volume_correction(x, v, faces, density_eff)
-        x = apply_global_volume_correction(x, faces, V_0, dt, 0.1)
-
-    return v, x
