@@ -192,7 +192,7 @@ def boundary_force(
     return f_boundary
 
 
-def compute_total_acceleration(
+def compute_accelerations(
     x,
     v,
     faces,
@@ -207,7 +207,6 @@ def compute_total_acceleration(
     adhesion_dist,
     max_internal_accel,
     density,
-    damping_gain=1.0,
 ):
     """Computes total acceleration and velocity Laplacian for a given state."""
     w = compute_cotangent_weights(x, faces)
@@ -238,7 +237,8 @@ def compute_total_acceleration(
     return a_total, delta_v
 
 
-def step_forward_euler(
+def update_forward_euler(
+    a,
     v,
     x,
     faces,
@@ -260,7 +260,7 @@ def step_forward_euler(
     damping_gain=1.0,
 ):
     """Advances the simulation by one explicit Euler time step."""
-    a_total, delta_v = compute_total_acceleration(
+    a_total, delta_v = compute_accelerations(
         x,
         v,
         faces,
@@ -275,12 +275,11 @@ def step_forward_euler(
         adhesion_dist,
         max_internal_accel,
         density,
-        damping_gain=damping_gain,
     )
 
     # Base viscosity and regular damping combination
     v_damped = (1.0 - mu * dt) * v + (eta * dt) * delta_v
-    
+
     # Energy-aware damping: linear damping + quadratic drag to kill oscillations over time.
     speed = np.linalg.norm(v, axis=1, keepdims=True)
     lin = np.maximum(0.0, mu) * float(damping_gain)
@@ -297,15 +296,90 @@ def step_forward_euler(
 
     v_new = np.clip(v_damped + a_total * dt, -15.0, 15.0)
     x_new = x + v_new * dt
-    
+
     x_new, v_new = apply_surface_interactions(
         x_new, v_new, dt, friction_coeff, adhesion_dist
     )
 
-    return v_new, x_new
+    return a_total, v_new, x_new
 
 
-def step_simulation(
+def update_velocity_verlet(
+    a,
+    v,
+    x,
+    faces,
+    neighbours,
+    V_0,
+    dt,
+    g,
+    gamma,
+    mu,
+    eta,
+    k_v,
+    friction_coeff,
+    boundary_alpha=0.5,
+    receding_angle=np.deg2rad(70.0),
+    advancing_angle=np.deg2rad(95.0),
+    adhesion_dist=0.05,
+    max_internal_accel=200.0,
+    density=1.0,
+    damping_gain=1.0,
+):
+    """Advances the simulation by one explicit Velocity Verlet time step."""
+    # Velocity Verlet integration scheme:
+    # x_new = x + v*dt + a*(dt²/2)
+    # a_new = compute_accelerations(x_new)
+    # v_new = v + (a + a_new)*(dt/2)
+
+    x_new = x + v * dt + a * (dt * dt * 0.5)
+    a_new, delta_v = compute_accelerations(
+        x_new,
+        v,
+        faces,
+        neighbours,
+        V_0,
+        g,
+        gamma,
+        k_v,
+        boundary_alpha,
+        receding_angle,
+        advancing_angle,
+        adhesion_dist,
+        max_internal_accel,
+        density,
+    )
+
+    v_new = v + (a + a_new) * (dt * 0.5)
+    v_damped = (1.0 - mu * dt) * v_new + (eta * dt) * delta_v
+
+    # Energy-aware damping: linear damping + quadratic drag to kill oscillations over time.
+    speed = np.linalg.norm(v_new, axis=1, keepdims=True)
+    lin = np.maximum(0.0, mu) * float(damping_gain)
+    quad = (0.2 + 0.3 * np.maximum(0.0, eta)) * float(damping_gain)
+    damping = 1.0 / (1.0 + lin * dt + quad * speed * dt)
+
+    # Apply the computed damping scaling to v_damped
+    v_damped = v_damped * damping
+
+    # Residual global damping in low-speed regime to ensure eventual settling.
+    mean_speed = float(np.mean(speed))
+    if mean_speed < 0.25:
+        v_damped *= max(0.0, 1.0 - 0.3 * dt * float(damping_gain))
+
+    # Clip velocities to prevent simulation instability
+    v_damped = np.clip(v_damped, -15.0, 15.0)
+
+    # Apply surface interactions with the damped velocity
+    x_new, v_final = apply_surface_interactions(
+        x_new, v_damped, dt, friction_coeff, adhesion_dist
+    )
+
+    return a_new, v_final, x_new
+
+
+def update(
+    a,
     v,
     x,
     faces,
@@ -328,6 +402,7 @@ def step_simulation(
     adhesion_dist=0.05,
     max_internal_accel=200.0,
     damping_gain=1.0,
+    method="euler",
 ):
     """Unified simulation step wrapper for euler mode."""
     if g is None:
@@ -341,7 +416,32 @@ def step_simulation(
     else:
         receding_eff, advancing_eff = receding_angle, advancing_angle
 
-    return step_forward_euler(
+    if method == "verlet":
+        return update_velocity_verlet(
+            a,
+            v,
+            x,
+            faces,
+            neighbours,
+            V_0,
+            dt,
+            g,
+            gamma,
+            mu,
+            eta,
+            k_v,
+            friction_coeff,
+            boundary_alpha=alpha_eff,
+            receding_angle=receding_eff,
+            advancing_angle=advancing_eff,
+            adhesion_dist=adhesion_dist,
+            max_internal_accel=max_internal_accel,
+            density=density_eff,
+            damping_gain=damping_gain,
+        )
+    
+    return update_forward_euler(
+        a,
         v,
         x,
         faces,
