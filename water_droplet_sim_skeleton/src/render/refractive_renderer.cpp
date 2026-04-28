@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <numbers>
 #include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -43,9 +45,9 @@ struct CameraMatrices {
 CameraMatrices buildCameraMatrices(const Camera& camera, int width, int height) {
     CameraMatrices matrices{};
     matrices.eye = toGlm(camera.position());
-    matrices.view = glm::lookAt(matrices.eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     const float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
-    matrices.proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+    matrices.view = camera.view();
+    matrices.proj = camera.proj(aspect);
     matrices.model = glm::mat4(1.0f);
     return matrices;
 }
@@ -103,6 +105,51 @@ void configureDepthTexture(unsigned int texture, int width, int height) {
 }
 
 } // namespace
+
+Vec3 Camera::forward() const {
+    const double cosPitch = std::cos(pitchRad_);
+    return Vec3(cosPitch * std::cos(yawRad_),
+                std::sin(pitchRad_),
+                cosPitch * std::sin(yawRad_)).normalized();
+}
+
+Vec3 Camera::right() const {
+    const Vec3 r = forward().cross(Vec3::UnitY());
+    return r.norm() > 1e-8 ? r.normalized() : Vec3::UnitX();
+}
+
+Vec3 Camera::up() const {
+    return right().cross(forward()).normalized();
+}
+
+double Camera::fovYRad() const {
+    return fovYDeg_ * std::numbers::pi / 180.0;
+}
+
+glm::mat4 Camera::view() const {
+    const glm::vec3 eye = toGlm(position_);
+    return glm::lookAt(eye, eye + toGlm(forward()), toGlm(up()));
+}
+
+glm::mat4 Camera::proj(double aspect) const {
+    const float safeAspect = static_cast<float>(std::max(aspect, 1e-6));
+    return glm::perspective(static_cast<float>(fovYRad()), safeAspect, 0.1f, 100.0f);
+}
+
+void Camera::rotate(double yawDeltaRad, double pitchDeltaRad) {
+    constexpr double maxPitch = 89.0 * std::numbers::pi / 180.0;
+    yawRad_ += yawDeltaRad;
+    pitchRad_ = std::clamp(pitchRad_ + pitchDeltaRad, -maxPitch, maxPitch);
+}
+
+void Camera::lookAt(const Vec3& target) {
+    Vec3 dir = target - position_;
+    if (dir.norm() <= 1e-8) return;
+
+    dir.normalize();
+    pitchRad_ = std::asin(std::clamp(dir.y(), -1.0, 1.0));
+    yawRad_ = std::atan2(dir.z(), dir.x());
+}
 
 RefractiveRenderer::~RefractiveRenderer() {
     releaseResources();

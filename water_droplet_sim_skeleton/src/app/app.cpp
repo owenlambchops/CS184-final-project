@@ -5,9 +5,19 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <iostream>
 
 namespace wd {
+
+namespace {
+
+constexpr double kMaxCameraDt = 0.1;
+constexpr double kCameraMoveSpeed = 2.0;
+constexpr double kCameraScrollSpeed = 0.12;
+constexpr double kCameraMouseSensitivity = 0.0025;
+
+} // namespace
 
 int App::run() {
     if (!initializeWindow()) return 1;
@@ -61,6 +71,7 @@ bool App::initializeWindow() {
 
     glfwSetWindowUserPointer(window_, this);
     glfwSetFramebufferSizeCallback(window_, &App::framebufferSizeCallback);
+    glfwSetScrollCallback(window_, &App::scrollCallback);
     glfwGetFramebufferSize(window_, &width_, &height_);
 
     initializeGlState();
@@ -71,6 +82,8 @@ bool App::initializeWindow() {
 bool App::initialize() {
     buildDefaultScene();
     camera_.setPosition(Vec3(2.2, 1.35, 2.2));
+    camera_.lookAt(Vec3::Zero());
+    lastFrameTimeSec_ = glfwGetTime();
 
     renderer_ = std::make_unique<RefractiveRenderer>();
     if (!renderer_->initialize(width_, height_)) {
@@ -155,11 +168,52 @@ void App::processInput() {
         glfwGetCursorPos(window_, &mouseX, &mouseY);
         input_->setMousePosition(mouseX, mouseY);
         input_->setLeftButton(glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+        input_->setRightButton(glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+    }
+}
+
+void App::updateCameraControls(double dt) {
+    if (!input_ || window_ == nullptr) return;
+
+    const InputState& state = input_->state();
+
+    if (state.rightDown) {
+        if (!cameraRightDragActive_ || state.rightPressed) {
+            cameraRightDragActive_ = true;
+        } else {
+            const double dx = state.mouseX - lastCameraMouseX_;
+            const double dy = state.mouseY - lastCameraMouseY_;
+            camera_.rotate(dx * kCameraMouseSensitivity, -dy * kCameraMouseSensitivity);
+        }
+
+        lastCameraMouseX_ = state.mouseX;
+        lastCameraMouseY_ = state.mouseY;
+    } else {
+        cameraRightDragActive_ = false;
+    }
+
+    Vec3 move = Vec3::Zero();
+    if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) move += camera_.forward();
+    if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) move -= camera_.forward();
+    if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) move += camera_.right();
+    if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) move -= camera_.right();
+
+    if (move.norm() > 1e-8) {
+        camera_.move(move.normalized() * kCameraMoveSpeed * dt);
+    }
+
+    if (state.scrollY != 0.0) {
+        camera_.move(camera_.forward() * state.scrollY * kCameraScrollSpeed);
     }
 }
 
 void App::update() {
+    const double now = glfwGetTime();
+    const double dt = std::clamp(now - lastFrameTimeSec_, 0.0, kMaxCameraDt);
+    lastFrameTimeSec_ = now;
+
     if (input_) input_->beginFrame();
+    updateCameraControls(dt);
     if (dragInteractor_ && input_) {
         dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
     }
@@ -167,6 +221,7 @@ void App::update() {
         sim_->step(scene_);
         singleStepRequested_ = false;
     }
+    if (input_) input_->clearFrameDeltas();
 }
 
 void App::render() {
@@ -205,6 +260,12 @@ void App::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     app->height_ = height;
     glViewport(0, 0, width, height);
     if (app->renderer_) app->renderer_->resize(width, height);
+}
+
+void App::scrollCallback(GLFWwindow* window, double, double yoffset) {
+    auto* app = static_cast<App*>(glfwGetWindowUserPointer(window));
+    if (app == nullptr || !app->input_) return;
+    app->input_->addScroll(yoffset);
 }
 
 } // namespace wd

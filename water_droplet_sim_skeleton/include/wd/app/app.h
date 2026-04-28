@@ -22,11 +22,13 @@ private:
     void buildDefaultScene();
     void restartSimulation();
     void processInput();
+    void updateCameraControls(double dt);
     void update();
     void render();
     void shutdown();
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
     GLFWwindow* window_ = nullptr;
     int width_ = 1280;
@@ -54,6 +56,10 @@ private:
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool cameraRightDragActive_ = false;
+    double lastCameraMouseX_ = 0.0;
+    double lastCameraMouseY_ = 0.0;
+    double lastFrameTimeSec_ = 0.0;
 };
 
 } // namespace wd
