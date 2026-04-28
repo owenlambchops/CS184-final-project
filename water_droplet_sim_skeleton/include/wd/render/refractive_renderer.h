@@ -28,8 +28,10 @@ public:
 private:
     bool initializeBasicResources();
     void initializePlaneMesh();
+    bool createRenderTargets();
+    void releaseRenderTargets();
+    bool checkFramebufferComplete(const char* name) const;
     void releaseResources();
-    void renderBasicScene(const Scene& scene, const Camera& camera);
 
     void renderSceneColorDepth(const Scene& scene, const Camera& camera);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
@@ -37,10 +39,22 @@ private:
 
     DropletGpuCache dropletCache_;
     Shader sceneShader_;
-    Shader dropletShader_;
+    Shader dropletGBufferShader_;
+    Shader compositeShader_;
     unsigned int planeVao_ = 0;
     unsigned int planeVbo_ = 0;
     unsigned int planeEbo_ = 0;
+    unsigned int fullscreenVao_ = 0;
+
+    unsigned int sceneFbo_ = 0;
+    unsigned int sceneColorTex_ = 0;
+    unsigned int sceneDepthTex_ = 0;
+
+    unsigned int dropletFbo_ = 0;
+    unsigned int dropletNormalTex_ = 0;
+    unsigned int dropletThicknessTex_ = 0;
+    unsigned int dropletDepthTex_ = 0;
+
     int planeIndexCount_ = 0;
     int width_ = 0;
     int height_ = 0;

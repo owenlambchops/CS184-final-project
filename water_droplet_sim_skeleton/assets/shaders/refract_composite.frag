@@ -10,7 +10,14 @@ uniform float uFresnelScale;
 uniform float uFresnelPower;
 
 void main() {
-    vec3 encN = texture(uDropletNormal, vUv).xyz;
+    vec3 scene = texture(uSceneColor, vUv).rgb;
+    vec4 normalSample = texture(uDropletNormal, vUv);
+    if (normalSample.a < 0.5) {
+        FragColor = vec4(scene, 1.0);
+        return;
+    }
+
+    vec3 encN = normalSample.xyz;
     vec3 n = normalize(encN * 2.0 - 1.0);
 
     vec2 offset = n.xy * uRefractionScale;
