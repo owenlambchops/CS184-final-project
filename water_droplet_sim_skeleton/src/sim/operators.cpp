@@ -2,23 +2,12 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
-#include <unordered_set>
 
 namespace wd {
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
-
-std::unordered_set<int> makeBoundarySet(const Droplet& d) {
-    return {d.boundaryLoop().begin(), d.boundaryLoop().end()};
-}
-
 Vec3 tangentComponent(const Vec3& v, const Vec3& n) {
     return v - v.dot(n) * n;
-}
-
-double degToRad(double deg) {
-    return deg * kPi / 180.0;
 }
 
 std::vector<std::vector<int>> buildAdjacency(const Droplet& d) {
@@ -30,9 +19,12 @@ std::vector<std::vector<int>> buildAdjacency(const Droplet& d) {
 
     for (int i = 0; i < d.faces().rows(); ++i) {
         int a = d.faces()(i, 0), b = d.faces()(i, 1), c = d.faces()(i, 2);
-        add(a, b); add(a, c);
-        add(b, a); add(b, c);
-        add(c, a); add(c, b);
+        add(a, b);
+        add(a, c);
+        add(b, a);
+        add(b, c);
+        add(c, a);
+        add(c, b);
     }
     return adj;
 }
@@ -205,44 +197,10 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface& surface, double
     U += (dt / density) * (fSt + fVol);
 }
 
-void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
-    const auto& X = drop.positions();
-    auto& U = drop.velocities();
-    const auto& normals = drop.derived().vertexNormals;
-
-    double alpha = std::max(0.0, drop.material().contactStiffness);
-    if (alpha <= 0.0) return;
-
-    double receding = degToRad(drop.material().recContactAngleDeg);
-    double advancing = degToRad(drop.material().advContactAngleDeg);
-    if (receding > advancing) std::swap(receding, advancing);
-
-    double density = std::max(drop.material().density, 1e-8);
-
-    for (int i = 0; i < X.rows(); ++i) {
-        Vec3 x = X.row(i).transpose();
-        SurfaceSample s = surface.closestSample(x);
-        if (s.signedDistance > adhesionDist) continue;
-
-        Vec3 nI = s.normal.normalized();
-        Vec3 nL = normals.row(i).transpose();
-        double dotVal = std::clamp(nL.dot(nI), -1.0, 1.0);
-        double angle = std::acos(dotVal);
-
-        Vec3 nP = nL - dotVal * nI;
-        double nPNorm = nP.norm();
-        if (nPNorm <= 1e-12) continue;
-
-        Vec3 nPDir = nP / nPNorm;
-        if (receding < angle && angle < advancing) continue;
-        double delta = (angle <= receding) ? (angle - receding) : (angle - advancing);
-
-        Vec3 fBoundary = alpha * delta * nPDir;
-        U.row(i) += ((dt / density) * fBoundary).transpose();
-    }
+void ContactLineOperator::apply(Droplet&, const ISurface&, double, double) const {
 }
 
-double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface& surface) const {
+double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&) const {
     double vol = 0.0;
 
     for (int i = 0; i < drop.faces().rows(); ++i) {
@@ -250,22 +208,6 @@ double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&
         Vec3 b = drop.positions().row(drop.faces()(i, 1)).transpose();
         Vec3 c = drop.positions().row(drop.faces()(i, 2)).transpose();
         vol += signedTetVolume(a, b, c);
-    }
-
-    if (drop.boundaryLoop().size() >= 3) {
-        Vec3 center = Vec3::Zero();
-        for (int idx : drop.boundaryLoop()) {
-            center += surface.projectPoint(drop.positions().row(idx).transpose());
-        }
-        center /= static_cast<double>(drop.boundaryLoop().size());
-
-        for (size_t k = 0; k < drop.boundaryLoop().size(); ++k) {
-            int ia = drop.boundaryLoop()[k];
-            int ib = drop.boundaryLoop()[(k + 1) % drop.boundaryLoop().size()];
-            Vec3 a = surface.projectPoint(drop.positions().row(ia).transpose());
-            Vec3 b = surface.projectPoint(drop.positions().row(ib).transpose());
-            vol += signedTetVolume(center, b, a);
-        }
     }
 
     return std::abs(vol);
@@ -279,14 +221,12 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double) cons
     double scale = std::clamp(1.0 + drop.material().volumeStiffness * (std::cbrt(ratio) - 1.0), 0.5, 1.5);
 
     auto& X = drop.positions();
-    auto boundary = makeBoundarySet(drop);
+    Vec3 center = X.colwise().mean().transpose();
 
     for (int i = 0; i < X.rows(); ++i) {
-        if (boundary.count(i)) continue;
         Vec3 x = X.row(i).transpose();
-        SurfaceSample s = surface.closestSample(x);
-        Vec3 offset = x - s.position;
-        X.row(i) = (s.position + scale * offset).transpose();
+        Vec3 offset = x - center;
+        X.row(i) = (center + scale * offset).transpose();
     }
 }
 

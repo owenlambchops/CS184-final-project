@@ -40,32 +40,6 @@ void Droplet::updateDerived() {
         derived_.avgVelocity = U_.colwise().mean().transpose();
     }
 
-    if (boundaryLoop().size() >= 3) {
-        Vec3 center = Vec3::Zero();
-        for (int idx : boundaryLoop()) center += X_.row(idx).transpose();
-        center /= static_cast<double>(boundaryLoop().size());
-
-        Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
-        double maxR = 0.0;
-        for (int idx : boundaryLoop()) {
-            Vec3 d = X_.row(idx).transpose() - center;
-            C += d * d.transpose();
-            maxR = std::max(maxR, d.norm());
-        }
-
-        C /= static_cast<double>(boundaryLoop().size());
-        derived_.footprintRadius = maxR;
-
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> es(C);
-        if (es.info() == Eigen::Success) {
-            auto vals = es.eigenvalues();
-            auto vecs = es.eigenvectors();
-            double largest = std::max(vals(2), 1e-12);
-            double smallest = std::max(vals(0), 1e-12);
-            derived_.elongationRatio = std::sqrt(largest / smallest);
-            derived_.principalAxis = vecs.col(2).normalized();
-        }
-    }
 }
 
 } // namespace wd

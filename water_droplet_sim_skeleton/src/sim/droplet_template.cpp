@@ -1,57 +1,47 @@
 #include "wd/sim/droplet_template.h"
+#include <array>
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <numbers>
+#include <igl/convex_hull.h>
 
 namespace wd {
 
-std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalCap(
-    int ringCount, int segmentCount, double baseRadius, double capHeight) {
-    ringCount = std::max(2, ringCount);
-    segmentCount = std::max(8, segmentCount);
+namespace {
+// Generates uniformly distributed points on sphere using Fibonacci sphere algorithm
+MatX3d generatePointsOnSphere(int nPoints, double radius) {
+    MatX3d points(nPoints, 3);
+    double goldenRatio = (1.0 + std::sqrt(5.0)) / 2.0;
+    for (int i = 0; i < nPoints; ++i) {
+        double theta = 2.0 * std::numbers::pi * i / goldenRatio;
+        double phi = std::acos(1.0 - 2.0 * i / static_cast<double>(nPoints));
+        double x = std::cos(theta) * std::sin(phi);
+        double y = std::sin(theta) * std::sin(phi);
+        double z = std::cos(phi);
+        points.row(i) = Vec3(x, y, z) * radius;
+    }
+    return points;
+}
+} // namespace
 
+std::shared_ptr<DropletTemplate> DropletTemplate::CreatePolyhedron(
+    int nVertices, double radius) {
+    
+    if (nVertices < 4) nVertices = 4;
+    
     auto tpl = std::make_shared<DropletTemplate>();
-    int vertexCount = 1 + ringCount * segmentCount;
-    tpl->restV_.resize(vertexCount, 3);
+    
+    // Generate points uniformly on sphere
+    MatX3d spherePoints = generatePointsOnSphere(nVertices, radius);
 
-    tpl->restV_.row(0) = Vec3(0.0, capHeight, 0.0).transpose();
+    // Use libigl convex hull for watertight triangulation
+    MatX3i hullFaces;
+    Eigen::VectorXi J;
+    igl::convex_hull(spherePoints, hullFaces, J);
 
-    for (int r = 1; r <= ringCount; ++r) {
-        double u = static_cast<double>(r) / static_cast<double>(ringCount);
-        double rad = baseRadius * u;
-        double y = capHeight * (1.0 - u * u);
-        for (int s = 0; s < segmentCount; ++s) {
-            double a = 2.0 * std::numbers::pi * static_cast<double>(s) / static_cast<double>(segmentCount);
-            int id = 1 + (r - 1) * segmentCount + s;
-            tpl->restV_.row(id) = Vec3(rad * std::cos(a), y, rad * std::sin(a)).transpose();
-        }
-    }
-
-    int faceCount = segmentCount + (ringCount - 1) * segmentCount * 2;
-    tpl->F_.resize(faceCount, 3);
-    int f = 0;
-
-    for (int s = 0; s < segmentCount; ++s) {
-        int a = 1 + s;
-        int b = 1 + ((s + 1) % segmentCount);
-        tpl->F_.row(f++) = Eigen::RowVector3i(0, b, a);
-    }
-
-    for (int r = 1; r < ringCount; ++r) {
-        int curr = 1 + (r - 1) * segmentCount;
-        int next = 1 + r * segmentCount;
-        for (int s = 0; s < segmentCount; ++s) {
-            int c0 = curr + s;
-            int c1 = curr + ((s + 1) % segmentCount);
-            int n0 = next + s;
-            int n1 = next + ((s + 1) % segmentCount);
-            tpl->F_.row(f++) = Eigen::RowVector3i(c0, n1, n0);
-            tpl->F_.row(f++) = Eigen::RowVector3i(c0, c1, n1);
-        }
-    }
-
-    int boundaryStart = 1 + (ringCount - 1) * segmentCount;
-    for (int s = 0; s < segmentCount; ++s) tpl->boundaryLoop_.push_back(boundaryStart + s);
+    tpl->restV_ = spherePoints;
+    tpl->F_ = hullFaces;
     return tpl;
 }
 

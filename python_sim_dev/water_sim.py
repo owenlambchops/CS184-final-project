@@ -21,6 +21,7 @@ def normalise(vec):
 
 def generate_points_on_sphere(n_pts=100, r=1.0):
     """Generates a uniformly distributed set of points on the surface of a sphere."""
+    """https://extremelearning.com.au/how-to-evenly-distribute-points-on-a-sphere-more-effectively-than-the-canonical-fibonacci-lattice/"""
     goldenRatio = (1 + np.sqrt(5)) / 2
     idx = np.linspace(0, n_pts - 1, n_pts)
     theta = 2 * np.pi * idx / goldenRatio
@@ -327,6 +328,7 @@ def update_velocity_verlet(
     damping_gain=1.0,
 ):
     """Advances the simulation by one explicit Velocity Verlet time step."""
+    """https://en.wikipedia.org/wiki/Verlet_integration#Algorithmic_representation"""
     # Velocity Verlet integration scheme:
     # x_new = x + v*dt + a*(dt²/2)
     # a_new = compute_accelerations(x_new)

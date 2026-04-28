@@ -3,23 +3,41 @@
 
 namespace wd {
 
+namespace {
+
+double computeTemplateVolume(const MatX3d& positions, const MatX3i& faces) {
+    double volume = 0.0;
+    for (int i = 0; i < faces.rows(); ++i) {
+        Vec3 a = positions.row(faces(i, 0)).transpose();
+        Vec3 b = positions.row(faces(i, 1)).transpose();
+        Vec3 c = positions.row(faces(i, 2)).transpose();
+        volume += a.dot(b.cross(c)) / 6.0;
+    }
+    return std::abs(volume);
+}
+
+} // namespace
+
 DropletFactory::DropletFactory(std::shared_ptr<const DropletTemplate> tpl) : tpl_(std::move(tpl)) {}
 
 std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, const ISurface& surface) const {
     auto drop = std::make_unique<Droplet>(id, tpl_, desc.material);
     SurfaceSample s = surface.closestSample(desc.anchorWorld);
+    const double lift = std::max(0.0, -tpl_->restVertices().col(1).minCoeff()) + 0.02;
 
     auto& X = drop->positions();
     auto& U = drop->velocities();
 
     for (int i = 0; i < X.rows(); ++i) {
         Vec3 local = tpl_->restVertices().row(i).transpose();
-        Vec3 world = s.position + local.x() * s.tangentU + local.y() * s.normal + local.z() * s.tangentV;
+        Vec3 world = s.position + local.x() * s.tangentU + (local.y() + lift) * s.normal + local.z() * s.tangentV;
         X.row(i) = world.transpose();
         U.row(i) = desc.initialVelocity.transpose();
     }
 
-    drop->setTargetVolume(desc.targetVolume);
+    double targetVolume = desc.targetVolume > 0.0 ? desc.targetVolume
+                                                  : computeTemplateVolume(tpl_->restVertices(), tpl_->faces());
+    drop->setTargetVolume(targetVolume);
     drop->updateDerived();
     return drop;
 }
