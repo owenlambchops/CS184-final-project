@@ -258,7 +258,7 @@ bool RefractiveRenderer::initializeEnvironmentMap() {
     int imageWidth = 0;
     int imageHeight = 0;
     int channelCount = 0;
-    stbi_set_flip_vertically_on_load(false);
+    stbi_set_flip_vertically_on_load(true);
     float* pixels = stbi_loadf(hdrPath.string().c_str(), &imageWidth, &imageHeight, &channelCount, 3);
     if (pixels == nullptr) {
         std::cerr << "Failed to load HDR environment: " << std::filesystem::absolute(hdrPath)
