@@ -391,10 +391,12 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera&, const Re
         compositeShader_.use();
         compositeShader_.setInt("uSceneColor", 0);
         compositeShader_.setInt("uDropletNormal", 1);
+        compositeShader_.setFloat("uIor", static_cast<float>(params.ior));
         compositeShader_.setFloat("uRefractionScale", static_cast<float>(params.refractionScale));
         compositeShader_.setFloat("uFresnelBias", static_cast<float>(params.fresnelBias));
         compositeShader_.setFloat("uFresnelScale", static_cast<float>(params.fresnelScale));
         compositeShader_.setFloat("uFresnelPower", static_cast<float>(params.fresnelPower));
+        compositeShader_.setFloat("uSpecularPower", static_cast<float>(params.specularPower));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sceneColorTex_);
