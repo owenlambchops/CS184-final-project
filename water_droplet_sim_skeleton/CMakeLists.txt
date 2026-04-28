@@ -29,6 +29,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(libigl CONFIG REQUIRED)
+find_path(STB_INCLUDE_DIR NAMES stb_image.h REQUIRED)
 
 add_library(wd_core
     src/core/scene.cpp
@@ -54,7 +55,7 @@ add_library(wd_core
     src/app/app.cpp
 )
 
-target_include_directories(wd_core PUBLIC include)
+target_include_directories(wd_core PUBLIC include ${STB_INCLUDE_DIR})
 target_link_libraries(wd_core PUBLIC
     Eigen3::Eigen
     glad::glad

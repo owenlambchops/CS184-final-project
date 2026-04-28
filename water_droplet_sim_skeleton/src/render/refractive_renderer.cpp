@@ -3,10 +3,15 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <string>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 namespace wd {
 
@@ -26,6 +31,7 @@ constexpr std::array<float, 24> kPlaneVertices = {
 };
 
 constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
+constexpr const char* kEnvironmentPath = "assets/static/suburban_garden_4k.hdr";
 
 struct CameraMatrices {
     glm::vec3 eye;
@@ -42,6 +48,10 @@ CameraMatrices buildCameraMatrices(const Camera& camera, int width, int height) 
     matrices.proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
     matrices.model = glm::mat4(1.0f);
     return matrices;
+}
+
+glm::mat4 inverseViewRotation(const glm::mat4& view) {
+    return glm::mat4(glm::mat3(glm::inverse(view)));
 }
 
 const char* framebufferStatusName(unsigned int status) {
@@ -107,7 +117,7 @@ bool RefractiveRenderer::initialize(int width, int height) {
 void RefractiveRenderer::resize(int width, int height) {
     width_ = width;
     height_ = height;
-    if (sceneShader_.id() != 0 || dropletGBufferShader_.id() != 0 || compositeShader_.id() != 0) {
+    if (supportSurfaceShader_.id() != 0 || dropletGBufferShader_.id() != 0 || compositeShader_.id() != 0) {
         if (!createRenderTargets()) {
             std::cerr << "Failed to resize renderer FBO attachments.\n";
         }
@@ -137,7 +147,12 @@ RenderStats RefractiveRenderer::render(const Scene& scene, const Camera& camera,
 bool RefractiveRenderer::initializeBasicResources() {
     releaseResources();
 
-    if (!sceneShader_.load("assets/shaders/scene.vert", "assets/shaders/scene.frag")) {
+    if (!supportSurfaceShader_.load("assets/shaders/support_surface.vert", "assets/shaders/support_surface.frag")) {
+        return false;
+    }
+
+    if (!backgroundShader_.load("assets/shaders/hdr_background.vert",
+                                "assets/shaders/hdr_background.frag")) {
         return false;
     }
 
@@ -154,7 +169,8 @@ bool RefractiveRenderer::initializeBasicResources() {
     initializePlaneMesh();
     glGenVertexArrays(1, &fullscreenVao_);
 
-    return planeVao_ != 0 && planeEbo_ != 0 && fullscreenVao_ != 0 && createRenderTargets();
+    return planeVao_ != 0 && planeEbo_ != 0 && fullscreenVao_ != 0 &&
+           initializeEnvironmentMap() && createRenderTargets();
 }
 
 void RefractiveRenderer::initializePlaneMesh() {
@@ -186,6 +202,48 @@ void RefractiveRenderer::initializePlaneMesh() {
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+}
+
+bool RefractiveRenderer::initializeEnvironmentMap() {
+    releaseEnvironmentMap();
+
+    const std::filesystem::path hdrPath = kEnvironmentPath;
+    int imageWidth = 0;
+    int imageHeight = 0;
+    int channelCount = 0;
+    stbi_set_flip_vertically_on_load(false);
+    float* pixels = stbi_loadf(hdrPath.string().c_str(), &imageWidth, &imageHeight, &channelCount, 3);
+    if (pixels == nullptr) {
+        std::cerr << "Failed to load HDR environment: " << std::filesystem::absolute(hdrPath)
+                  << "\n" << stbi_failure_reason() << "\n";
+        return false;
+    }
+
+    glGenTextures(1, &environmentTex_);
+    glBindTexture(GL_TEXTURE_2D, environmentTex_);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGB16F,
+                 imageWidth,
+                 imageHeight,
+                 0,
+                 GL_RGB,
+                 GL_FLOAT,
+                 pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(pixels);
+    return environmentTex_ != 0;
+}
+
+void RefractiveRenderer::releaseEnvironmentMap() {
+    if (environmentTex_ != 0) glDeleteTextures(1, &environmentTex_);
+    environmentTex_ = 0;
 }
 
 bool RefractiveRenderer::createRenderTargets() {
@@ -308,6 +366,7 @@ bool RefractiveRenderer::checkFramebufferComplete(const char* name) const {
 }
 
 void RefractiveRenderer::releaseResources() {
+    releaseEnvironmentMap();
     releaseRenderTargets();
     dropletCache_.clear();
 
@@ -322,9 +381,35 @@ void RefractiveRenderer::releaseResources() {
     fullscreenVao_ = 0;
     planeIndexCount_ = 0;
 
-    sceneShader_.reset();
+    supportSurfaceShader_.reset();
+    backgroundShader_.reset();
     dropletGBufferShader_.reset();
     compositeShader_.reset();
+}
+
+void RefractiveRenderer::renderEnvironmentBackground(const Camera& camera) {
+    if (environmentTex_ == 0 || backgroundShader_.id() == 0 || fullscreenVao_ == 0) return;
+
+    const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
+    backgroundShader_.use();
+    backgroundShader_.setInt("uEnvironmentMap", 0);
+    backgroundShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
+    backgroundShader_.setMat4("uInvViewRot", inverseViewRotation(matrices.view));
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, environmentTex_);
+
+    glBindVertexArray(fullscreenVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    glUseProgram(0);
 }
 
 void RefractiveRenderer::renderSceneColorDepth(const Scene&, const Camera& camera) {
@@ -337,12 +422,13 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene&, const Camera& camer
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
+    renderEnvironmentBackground(camera);
 
-    if (sceneShader_.id() != 0 && planeVao_ != 0) {
-        sceneShader_.use();
-        sceneShader_.setMat4("uModel", matrices.model);
-        sceneShader_.setMat4("uView", matrices.view);
-        sceneShader_.setMat4("uProj", matrices.proj);
+    if (supportSurfaceShader_.id() != 0 && planeVao_ != 0) {
+        supportSurfaceShader_.use();
+        supportSurfaceShader_.setMat4("uModel", matrices.model);
+        supportSurfaceShader_.setMat4("uView", matrices.view);
+        supportSurfaceShader_.setMat4("uProj", matrices.proj);
 
         glBindVertexArray(planeVao_);
         glDrawElements(GL_TRIANGLES, planeIndexCount_, GL_UNSIGNED_INT, nullptr);
@@ -381,16 +467,20 @@ void RefractiveRenderer::renderDropletGBuffer(const Scene& scene, const Camera& 
     glUseProgram(0);
 }
 
-void RefractiveRenderer::compositeDroplets(const Scene&, const Camera&, const RenderParams& params) {
+void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, const RenderParams& params) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width_, height_);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
     if (compositeShader_.id() != 0 && fullscreenVao_ != 0) {
+        const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
+
         compositeShader_.use();
         compositeShader_.setInt("uSceneColor", 0);
         compositeShader_.setInt("uDropletNormal", 1);
+        compositeShader_.setInt("uEnvironmentMap", 2);
+        compositeShader_.setMat4("uInvViewRot", inverseViewRotation(matrices.view));
         compositeShader_.setFloat("uIor", static_cast<float>(params.ior));
         compositeShader_.setFloat("uRefractionScale", static_cast<float>(params.refractionScale));
         compositeShader_.setFloat("uFresnelBias", static_cast<float>(params.fresnelBias));
@@ -402,11 +492,15 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera&, const Re
         glBindTexture(GL_TEXTURE_2D, sceneColorTex_);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, dropletNormalTex_);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, environmentTex_);
 
         glBindVertexArray(fullscreenVao_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE0);

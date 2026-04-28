@@ -5,6 +5,7 @@
     "eigen3",
     "glfw3",
     "glm",
+    "stb",
     {
       "name": "glad",
       "default-features": false,

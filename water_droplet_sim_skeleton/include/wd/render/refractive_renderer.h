@@ -29,16 +29,20 @@ private:
     bool initializeBasicResources();
     void initializePlaneMesh();
     bool createRenderTargets();
+    bool initializeEnvironmentMap();
+    void releaseEnvironmentMap();
     void releaseRenderTargets();
     bool checkFramebufferComplete(const char* name) const;
     void releaseResources();
 
+    void renderEnvironmentBackground(const Camera& camera);
     void renderSceneColorDepth(const Scene& scene, const Camera& camera);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
     void compositeDroplets(const Scene& scene, const Camera& camera, const RenderParams& params);
 
     DropletGpuCache dropletCache_;
-    Shader sceneShader_;
+    Shader supportSurfaceShader_;
+    Shader backgroundShader_;
     Shader dropletGBufferShader_;
     Shader compositeShader_;
     unsigned int planeVao_ = 0;
@@ -54,6 +58,8 @@ private:
     unsigned int dropletNormalTex_ = 0;
     unsigned int dropletThicknessTex_ = 0;
     unsigned int dropletDepthTex_ = 0;
+
+    unsigned int environmentTex_ = 0;
 
     int planeIndexCount_ = 0;
     int width_ = 0;
