@@ -34,6 +34,8 @@ constexpr std::array<float, 24> kPlaneVertices = {
 
 constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
 constexpr const char* kEnvironmentPath = "assets/static/suburban_garden_4k.hdr";
+constexpr float kCameraNearPlane = 0.1f;
+constexpr float kCameraFarPlane = 100.0f;
 
 struct CameraMatrices {
     glm::vec3 eye;
@@ -133,7 +135,7 @@ glm::mat4 Camera::view() const {
 
 glm::mat4 Camera::proj(double aspect) const {
     const float safeAspect = static_cast<float>(std::max(aspect, 1e-6));
-    return glm::perspective(static_cast<float>(fovYRad()), safeAspect, 0.1f, 100.0f);
+    return glm::perspective(static_cast<float>(fovYRad()), safeAspect, kCameraNearPlane, kCameraFarPlane);
 }
 
 void Camera::rotate(double yawDeltaRad, double pitchDeltaRad) {
@@ -527,8 +529,13 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setInt("uSceneColor", 0);
         compositeShader_.setInt("uDropletNormal", 1);
         compositeShader_.setInt("uEnvironmentMap", 2);
+        compositeShader_.setInt("uSceneDepth", 3);
+        compositeShader_.setInt("uDropletDepth", 4);
+        compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
         compositeShader_.setMat4("uInvViewRot", inverseViewRotation(matrices.view));
         compositeShader_.setFloat("uIor", static_cast<float>(params.ior));
+        compositeShader_.setFloat("uNearPlane", kCameraNearPlane);
+        compositeShader_.setFloat("uFarPlane", kCameraFarPlane);
         compositeShader_.setFloat("uRefractionScale", static_cast<float>(params.refractionScale));
         compositeShader_.setFloat("uFresnelBias", static_cast<float>(params.fresnelBias));
         compositeShader_.setFloat("uFresnelScale", static_cast<float>(params.fresnelScale));
@@ -541,11 +548,19 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         glBindTexture(GL_TEXTURE_2D, dropletNormalTex_);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, environmentTex_);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, sceneDepthTex_);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, dropletDepthTex_);
 
         glBindVertexArray(fullscreenVao_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE1);
