@@ -74,6 +74,16 @@ struct SolverParams {
     double maxVelocity = 15.0;
 };
 
+enum class RenderDebugView : int {
+    Final = 0,
+    SceneColor = 1,
+    EnvironmentMap = 2,
+    SceneDepth = 3,
+    DropletDepth = 4,
+    DropletNormal = 5,
+    Thickness = 6,
+};
+
 struct RenderParams {
     double ior = 1.33;
     double fresnelBias = 0.02;
@@ -82,6 +92,7 @@ struct RenderParams {
 
     double refractionScale = 0.03;
     bool enableThickness = true;
+    RenderDebugView debugView = RenderDebugView::Final;
 };
 
 struct SimulationStats {

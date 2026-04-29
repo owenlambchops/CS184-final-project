@@ -537,6 +537,7 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setInt("uSceneDepth", 3);
         compositeShader_.setInt("uDropletDepth", 4);
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
+        compositeShader_.setInt("uDebugView", static_cast<int>(params.debugView));
         compositeShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
         compositeShader_.setMat3("uInvViewRot", inverseViewRotation(matrices.view));
         compositeShader_.setFloat("uIor", static_cast<float>(params.ior));

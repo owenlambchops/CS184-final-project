@@ -10,6 +10,7 @@ uniform sampler2D uDropletDepth;
 uniform mat4 uInvProj;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
+uniform int uDebugView;
 uniform float uIor;
 uniform float uNearPlane;
 uniform float uFarPlane;
@@ -20,8 +21,16 @@ uniform float uFresnelPower;
 
 const float kPi = 3.14159265359;
 const float kMaxThickness = 1.0;
+const float kDebugDepthRange = 8.0;
 const float kAbsorptionStrength = 1.35;
 const vec3 kAbsorptionColor = vec3(0.65, 0.24, 0.10);
+const int kDebugFinal = 0;
+const int kDebugSceneColor = 1;
+const int kDebugEnvironmentMap = 2;
+const int kDebugSceneDepth = 3;
+const int kDebugDropletDepth = 4;
+const int kDebugDropletNormal = 5;
+const int kDebugThickness = 6;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
@@ -53,9 +62,63 @@ float estimateThickness() {
     return clamp(sceneLinear - dropletLinear, 0.0, kMaxThickness);
 }
 
+float visualizeSceneDepth(float depth) {
+    if (depth >= 0.9999) {
+        return 0.0;
+    }
+    return 1.0 - clamp(linearizeDepth(depth) / kDebugDepthRange, 0.0, 1.0);
+}
+
+float visualizeDropletDepth(float depth) {
+    if (depth >= 0.9999) {
+        return 0.0;
+    }
+    return 1.0 - clamp(linearizeDepth(depth) / kDebugDepthRange, 0.0, 1.0);
+}
+
 void main() {
     vec3 scene = texture(uSceneColor, vUv).rgb;
+    vec2 ndc = vUv * 2.0 - 1.0;
+    vec4 view = uInvProj * vec4(ndc, 1.0, 1.0);
+    vec3 viewDir = normalize(view.xyz / view.w);
+
+    if (uDebugView == kDebugSceneColor) {
+        FragColor = vec4(scene, 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugEnvironmentMap) {
+        vec3 worldDir = normalize(uInvViewRot * viewDir);
+        vec3 environment = toneMap(texture(uEnvironmentMap, equirectUv(worldDir)).rgb);
+        FragColor = vec4(environment, 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugSceneDepth) {
+        float depth = visualizeSceneDepth(texture(uSceneDepth, vUv).r);
+        FragColor = vec4(vec3(depth), 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugDropletDepth) {
+        float depth = visualizeDropletDepth(texture(uDropletDepth, vUv).r);
+        FragColor = vec4(vec3(depth), 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugThickness) {
+        float thickness = estimateThickness();
+        FragColor = vec4(vec3(thickness), 1.0);
+        return;
+    }
+
     vec4 normalSample = texture(uDropletNormal, vUv);
+    if (uDebugView == kDebugDropletNormal) {
+        FragColor = normalSample.a < 0.5 ? vec4(0.0, 0.0, 0.0, 1.0)
+                                         : vec4(normalSample.xyz, 1.0);
+        return;
+    }
+
     if (normalSample.a < 0.5) {
         FragColor = vec4(scene, 1.0);
         return;
@@ -63,9 +126,6 @@ void main() {
 
     vec3 encN = normalSample.xyz;
     vec3 n = normalize(encN * 2.0 - 1.0);
-    vec2 ndc = vUv * 2.0 - 1.0;
-    vec4 view = uInvProj * vec4(ndc, 1.0, 1.0);
-    vec3 viewDir = normalize(view.xyz / view.w);
 
     vec2 offset = n.xy * uRefractionScale;
     vec2 refractUv = clamp(vUv + offset, vec2(0.0), vec2(1.0));

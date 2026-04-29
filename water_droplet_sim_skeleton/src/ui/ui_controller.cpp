@@ -4,8 +4,22 @@
 
 namespace wd {
 
+namespace {
+
+constexpr const char* kDebugViewLabels[] = {
+    "Final",
+    "Scene Color",
+    "Environment Map",
+    "Scene Depth",
+    "Droplet Depth",
+    "Droplet Normal",
+    "Thickness",
+};
+
+} // namespace
+
 UiActions UiController::draw(SolverParams&,
-                             RenderParams&,
+                             RenderParams& renderParams,
                              MaterialParams&,
                              const Vec3& gravityLikeForce,
                              MergeSplitController&) {
@@ -32,6 +46,13 @@ UiActions UiController::draw(SolverParams&,
     if (ImGui::Button("Apply Gravity")) {
         actions.applyGravity = true;
         actions.gravityForce = gravityDraft_;
+    }
+
+    ImGui::Separator();
+    int debugView = static_cast<int>(renderParams.debugView);
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    if (ImGui::Combo("Debug View", &debugView, kDebugViewLabels, IM_ARRAYSIZE(kDebugViewLabels))) {
+        renderParams.debugView = static_cast<RenderDebugView>(debugView);
     }
 
     ImGui::End();
