@@ -5,6 +5,9 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -93,11 +96,35 @@ bool App::initialize() {
         return false;
     }
 
+    if (!initializeImGui()) return false;
+
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
 
+    return true;
+}
+
+bool App::initializeImGui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+
+    if (!ImGui_ImplGlfw_InitForOpenGL(window_, true)) {
+        std::cerr << "Failed to initialize ImGui GLFW backend.\n";
+        ImGui::DestroyContext();
+        return false;
+    }
+
+    if (!ImGui_ImplOpenGL3_Init("#version 330")) {
+        std::cerr << "Failed to initialize ImGui OpenGL backend.\n";
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        return false;
+    }
+
+    imguiInitialized_ = true;
     return true;
 }
 
@@ -110,29 +137,38 @@ void App::buildDefaultScene() {
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
 
     auto composite = std::make_shared<CompositeForceField>();
-    composite->addField(std::make_shared<ConstantForceField>(gravityLikeForce_));
+    gravityField_ = std::make_shared<ConstantForceField>(gravityLikeForce_);
+    composite->addField(gravityField_);
     dragField_ = std::make_shared<DragForceField>();
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    auto tpl = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
-    DropletFactory factory(tpl);
+    dropletTemplate_ = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
+    DropletFactory factory(dropletTemplate_);
+    MergeSplitController mergeSplit(factory);
+    sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
+}
 
+void App::spawnDropletAt(const Vec3& anchorWorld) {
+    if (!scene_.hasSurface() || !dropletTemplate_) return;
+
+    DropletFactory factory(dropletTemplate_);
     SpawnDesc desc;
-    desc.anchorWorld = Vec3(0.0, 0.0, 0.0);
+    desc.anchorWorld = anchorWorld;
     desc.initialVelocity = Vec3::Zero();
     desc.targetVolume = 0.01;
     desc.material = defaultMaterial_;
-    scene_.droplets().push_back(factory.spawn(1, desc, scene_.surface()));
 
-    MergeSplitController mergeSplit(factory);
-    sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
+    scene_.droplets().push_back(factory.spawn(nextDropletId_++, desc, scene_.surface()));
 }
 
 void App::restartSimulation() {
     scene_ = Scene{};
     sim_.reset();
+    gravityField_.reset();
     dragField_.reset();
+    dropletTemplate_.reset();
+    nextDropletId_ = 1;
 
     buildDefaultScene();
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
@@ -146,23 +182,30 @@ void App::processInput() {
         glfwSetWindowShouldClose(window_, GLFW_TRUE);
     }
 
-    const bool pauseKeyDown = glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS;
-    if (pauseKeyDown && !pauseKeyWasDown_) {
-        paused_ = !paused_;
-    }
-    pauseKeyWasDown_ = pauseKeyDown;
+    const bool imguiWantsKeyboard = imguiInitialized_ && ImGui::GetIO().WantCaptureKeyboard;
+    if (!imguiWantsKeyboard) {
+        const bool pauseKeyDown = glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS;
+        if (pauseKeyDown && !pauseKeyWasDown_) {
+            paused_ = !paused_;
+        }
+        pauseKeyWasDown_ = pauseKeyDown;
 
-    const bool stepKeyDown = glfwGetKey(window_, GLFW_KEY_N) == GLFW_PRESS;
-    if (paused_ && stepKeyDown && !stepKeyWasDown_) {
-        singleStepRequested_ = true;
-    }
-    stepKeyWasDown_ = stepKeyDown;
+        const bool stepKeyDown = glfwGetKey(window_, GLFW_KEY_N) == GLFW_PRESS;
+        if (paused_ && stepKeyDown && !stepKeyWasDown_) {
+            singleStepRequested_ = true;
+        }
+        stepKeyWasDown_ = stepKeyDown;
 
-    const bool restartKeyDown = glfwGetKey(window_, GLFW_KEY_R) == GLFW_PRESS;
-    if (restartKeyDown && !restartKeyWasDown_) {
-        restartSimulation();
+        const bool restartKeyDown = glfwGetKey(window_, GLFW_KEY_R) == GLFW_PRESS;
+        if (restartKeyDown && !restartKeyWasDown_) {
+            restartSimulation();
+        }
+        restartKeyWasDown_ = restartKeyDown;
+    } else {
+        pauseKeyWasDown_ = false;
+        stepKeyWasDown_ = false;
+        restartKeyWasDown_ = false;
     }
-    restartKeyWasDown_ = restartKeyDown;
 
     if (input_) {
         double mouseX = 0.0;
@@ -222,10 +265,17 @@ void App::update() {
     lastFrameTimeSec_ = now;
 
     if (input_) input_->beginFrame();
-    updateCameraControls(dt);
-    if (dragInteractor_ && input_) {
+    const bool imguiWantsMouse = imguiInitialized_ && ImGui::GetIO().WantCaptureMouse;
+    if (!imguiWantsMouse) {
+        updateCameraControls(dt);
+    } else {
+        cameraRightDragActive_ = false;
+    }
+
+    if (!imguiWantsMouse && dragInteractor_ && input_) {
         dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
     }
+
     if (sim_ && (!paused_ || singleStepRequested_)) {
         sim_->step(scene_);
         singleStepRequested_ = false;
@@ -238,11 +288,42 @@ void App::render() {
     stats.frameWidth = width_;
     stats.frameHeight = height_;
 
+    bool drawUi = false;
+    if (imguiInitialized_ && ui_ && sim_) {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        UiActions actions = ui_->draw(
+            solverParams_, renderParams_, defaultMaterial_, gravityLikeForce_, sim_->mergeSplitController());
+        if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
+        if (actions.applyGravity) {
+            gravityLikeForce_ = actions.gravityForce;
+            if (gravityField_) gravityField_->setForce(gravityLikeForce_);
+        }
+
+        ImGui::Render();
+        drawUi = true;
+    }
+
     if (renderer_) {
         stats = renderer_->render(scene_, camera_, renderParams_);
     }
 
+    if (drawUi) {
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+
     if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
+}
+
+void App::shutdownImGui() {
+    if (!imguiInitialized_) return;
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    imguiInitialized_ = false;
 }
 
 void App::shutdown() {
@@ -252,6 +333,8 @@ void App::shutdown() {
     input_.reset();
     sim_.reset();
     renderer_.reset();
+
+    shutdownImGui();
 
     if (window_ != nullptr) {
         glfwDestroyWindow(window_);

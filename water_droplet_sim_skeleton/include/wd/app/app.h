@@ -11,6 +11,9 @@ struct GLFWwindow;
 
 namespace wd {
 
+class ConstantForceField;
+class DropletTemplate;
+
 class App {
 public:
     int run();
@@ -18,13 +21,16 @@ public:
 private:
     bool initializeWindow();
     bool initialize();
+    bool initializeImGui();
     void initializeGlState();
     void buildDefaultScene();
+    void spawnDropletAt(const Vec3& anchorWorld);
     void restartSimulation();
     void processInput();
     void updateCameraControls(double dt);
     void update();
     void render();
+    void shutdownImGui();
     void shutdown();
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -42,7 +48,9 @@ private:
     MaterialParams defaultMaterial_;
     Vec3 gravityLikeForce_ = Vec3(0.0, 0.0, 0.0);
 
+    std::shared_ptr<ConstantForceField> gravityField_;
     std::shared_ptr<DragForceField> dragField_;
+    std::shared_ptr<const DropletTemplate> dropletTemplate_;
 
     std::unique_ptr<InputRouter> input_;
     std::unique_ptr<DragInteractor> dragInteractor_;
@@ -56,7 +64,9 @@ private:
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool imguiInitialized_ = false;
     bool cameraRightDragActive_ = false;
+    int nextDropletId_ = 1;
     double lastCameraMouseX_ = 0.0;
     double lastCameraMouseY_ = 0.0;
     double lastFrameTimeSec_ = 0.0;
