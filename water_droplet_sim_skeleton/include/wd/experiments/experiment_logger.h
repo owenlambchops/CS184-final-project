@@ -18,7 +18,7 @@ class ExperimentLogger {
 public:
     void beginRun(const std::string& name);
     void record(double timeSec, const Scene& scene, const SimulationStats& simStats, const RenderStats& renderStats);
-    void saveCsv(const std::string& path) const;
+    bool saveCsv(const std::string& path) const;
     void clear();
 
 private:

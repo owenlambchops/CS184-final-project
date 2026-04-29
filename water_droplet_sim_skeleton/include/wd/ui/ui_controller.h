@@ -9,6 +9,7 @@ struct UiActions {
     Vec3 spawnAnchor = Vec3::Zero();
     bool applyGravity = false;
     Vec3 gravityForce = Vec3::Zero();
+    bool saveScreenshot = false;
 };
 
 class UiController {

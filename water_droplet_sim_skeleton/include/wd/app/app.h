@@ -6,6 +6,7 @@
 #include "wd/render/refractive_renderer.h"
 #include "wd/sim/simulation_system.h"
 #include "wd/ui/ui_controller.h"
+#include <string>
 
 struct GLFWwindow;
 
@@ -30,6 +31,8 @@ private:
     void updateCameraControls(double dt);
     void update();
     void render();
+    void saveExperimentCsv() const;
+    void saveScreenshot();
     void shutdownImGui();
     void shutdown();
 
@@ -63,10 +66,15 @@ private:
     bool pauseKeyWasDown_ = false;
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
+    bool screenshotKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool simulationAdvancedThisFrame_ = false;
+    bool screenshotRequested_ = false;
     bool imguiInitialized_ = false;
     bool cameraRightDragActive_ = false;
     int nextDropletId_ = 1;
+    int screenshotCounter_ = 1;
+    std::string runName_;
     double lastCameraMouseX_ = 0.0;
     double lastCameraMouseY_ = 0.0;
     double lastFrameTimeSec_ = 0.0;

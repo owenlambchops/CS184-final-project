@@ -52,6 +52,7 @@ add_library(wd_core
     src/interaction/drag_interactor.cpp
     src/ui/ui_controller.cpp
     src/experiments/experiment_logger.cpp
+    src/experiments/screenshot_writer.cpp
     src/app/app.cpp
 )
 

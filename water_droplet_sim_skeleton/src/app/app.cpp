@@ -1,4 +1,5 @@
 #include "wd/app/app.h"
+#include "wd/experiments/screenshot_writer.h"
 #include "wd/sim/droplet_factory.h"
 #include "wd/sim/droplet_template.h"
 #include "wd/surface/plane_surface.h"
@@ -9,8 +10,13 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <ctime>
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 namespace wd {
 
@@ -21,6 +27,43 @@ constexpr double kCameraMoveSpeed = 2.0;
 constexpr double kCameraScrollDistance = 0.12;
 constexpr double kCameraScrollSmoothingTime = 0.18;
 constexpr double kCameraMouseSensitivity = 0.0025;
+constexpr const char* kExperimentOutputDir = "experiments";
+
+std::string makeTimestampedRunName() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime{};
+#if defined(_WIN32)
+    localtime_s(&localTime, &nowTime);
+#else
+    localtime_r(&nowTime, &localTime);
+#endif
+
+    std::ostringstream name;
+    name << "run_" << std::put_time(&localTime, "%Y%m%d_%H%M%S");
+    return name.str();
+}
+
+bool ensureExperimentOutputDir() {
+    std::error_code error;
+    std::filesystem::create_directories(kExperimentOutputDir, error);
+    if (error) {
+        std::cerr << "Failed to create experiment output directory: "
+                  << error.message() << "\n";
+        return false;
+    }
+    return true;
+}
+
+std::filesystem::path experimentOutputPath(const std::string& filename) {
+    return std::filesystem::path(kExperimentOutputDir) / filename;
+}
+
+std::string makeScreenshotFilename(const std::string& runName, int index) {
+    std::ostringstream filename;
+    filename << runName << "_screenshot_" << std::setw(4) << std::setfill('0') << index << ".png";
+    return filename.str();
+}
 
 } // namespace
 
@@ -102,6 +145,8 @@ bool App::initialize() {
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
+    runName_ = makeTimestampedRunName();
+    logger_->beginRun(runName_);
 
     return true;
 }
@@ -201,11 +246,18 @@ void App::processInput() {
             restartSimulation();
         }
         restartKeyWasDown_ = restartKeyDown;
+
     } else {
         pauseKeyWasDown_ = false;
         stepKeyWasDown_ = false;
         restartKeyWasDown_ = false;
     }
+
+    const bool screenshotKeyDown = glfwGetKey(window_, GLFW_KEY_G) == GLFW_PRESS;
+    if (screenshotKeyDown && !screenshotKeyWasDown_) {
+        screenshotRequested_ = true;
+    }
+    screenshotKeyWasDown_ = screenshotKeyDown;
 
     if (input_) {
         double mouseX = 0.0;
@@ -260,6 +312,8 @@ void App::updateCameraControls(double dt) {
 }
 
 void App::update() {
+    simulationAdvancedThisFrame_ = false;
+
     const double now = glfwGetTime();
     const double dt = std::clamp(now - lastFrameTimeSec_, 0.0, kMaxCameraDt);
     lastFrameTimeSec_ = now;
@@ -278,6 +332,7 @@ void App::update() {
 
     if (sim_ && (!paused_ || singleStepRequested_)) {
         sim_->step(scene_);
+        simulationAdvancedThisFrame_ = true;
         singleStepRequested_ = false;
     }
     if (input_) input_->clearFrameDeltas();
@@ -307,6 +362,7 @@ void App::render() {
             gravityLikeForce_ = actions.gravityForce;
             if (gravityField_) gravityField_->setForce(gravityLikeForce_);
         }
+        if (actions.saveScreenshot) screenshotRequested_ = true;
 
         ImGui::Render();
         drawUi = true;
@@ -320,7 +376,34 @@ void App::render() {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
 
-    if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
+    if (screenshotRequested_) saveScreenshot();
+
+    if (logger_ && sim_ && simulationAdvancedThisFrame_) {
+        logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
+    }
+}
+
+void App::saveExperimentCsv() const {
+    if (!logger_ || runName_.empty() || !ensureExperimentOutputDir()) return;
+
+    const auto path = experimentOutputPath(runName_ + ".csv");
+    if (!logger_->saveCsv(path.string())) {
+        std::cerr << "Failed to save experiment CSV: " << path << "\n";
+    }
+}
+
+void App::saveScreenshot() {
+    screenshotRequested_ = false;
+    if (runName_.empty() || !ensureExperimentOutputDir()) return;
+
+    const auto path = experimentOutputPath(makeScreenshotFilename(runName_, screenshotCounter_));
+    if (!saveFramebufferPng(path.string(), width_, height_)) {
+        std::cerr << "Failed to save screenshot: " << path << "\n";
+        return;
+    }
+
+    std::cout << "Saved screenshot: " << path << "\n";
+    ++screenshotCounter_;
 }
 
 void App::shutdownImGui() {
@@ -333,6 +416,8 @@ void App::shutdownImGui() {
 }
 
 void App::shutdown() {
+    saveExperimentCsv();
+
     logger_.reset();
     ui_.reset();
     dragInteractor_.reset();

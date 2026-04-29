@@ -42,6 +42,9 @@ UiActions UiController::draw(SolverParams&,
         actions.createDroplet = true;
         actions.spawnAnchor = spawnAnchor_;
     }
+    if (ImGui::Button("Save Screenshot")) {
+        actions.saveScreenshot = true;
+    }
 
     ImGui::Separator();
     ImGui::SetNextItemWidth(vectorInputWidth);
