@@ -60,6 +60,7 @@ private:
     double lastCameraMouseX_ = 0.0;
     double lastCameraMouseY_ = 0.0;
     double lastFrameTimeSec_ = 0.0;
+    double cameraScrollVelocity_ = 0.0;
 };
 
 } // namespace wd

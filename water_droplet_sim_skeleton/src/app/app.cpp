@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 namespace wd {
@@ -14,7 +15,8 @@ namespace {
 
 constexpr double kMaxCameraDt = 0.1;
 constexpr double kCameraMoveSpeed = 2.0;
-constexpr double kCameraScrollSpeed = 0.12;
+constexpr double kCameraScrollDistance = 0.12;
+constexpr double kCameraScrollSmoothingTime = 0.18;
 constexpr double kCameraMouseSensitivity = 0.0025;
 
 } // namespace
@@ -203,7 +205,14 @@ void App::updateCameraControls(double dt) {
     }
 
     if (state.scrollY != 0.0) {
-        camera_.move(camera_.forward() * state.scrollY * kCameraScrollSpeed);
+        cameraScrollVelocity_ += state.scrollY * kCameraScrollDistance / kCameraScrollSmoothingTime;
+    }
+
+    if (std::abs(cameraScrollVelocity_) > 1e-5) {
+        camera_.move(camera_.forward() * cameraScrollVelocity_ * dt);
+        cameraScrollVelocity_ *= std::exp(-dt / kCameraScrollSmoothingTime);
+    } else {
+        cameraScrollVelocity_ = 0.0;
     }
 }
 
