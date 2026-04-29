@@ -289,13 +289,19 @@ void App::render() {
     stats.frameHeight = height_;
 
     bool drawUi = false;
-    if (imguiInitialized_ && ui_ && sim_) {
+    if (imguiInitialized_ && ui_ && sim_ && scene_.hasSurface()) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
         UiActions actions = ui_->draw(
-            solverParams_, renderParams_, defaultMaterial_, gravityLikeForce_, sim_->mergeSplitController());
+            solverParams_,
+            renderParams_,
+            defaultMaterial_,
+            scene_.surface().material(),
+            scene_.surface().renderParams(),
+            gravityLikeForce_,
+            sim_->mergeSplitController());
         if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
         if (actions.applyGravity) {
             gravityLikeForce_ = actions.gravityForce;

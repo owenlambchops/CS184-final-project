@@ -6,10 +6,12 @@ uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProj;
 
+out vec3 vWorldPosition;
 out vec3 vWorldNormal;
 
 void main() {
     vec4 world = uModel * vec4(aPosition, 1.0);
+    vWorldPosition = world.xyz;
     vWorldNormal = mat3(transpose(inverse(uModel))) * aNormal;
     gl_Position = uProj * uView * world;
 }

@@ -12,6 +12,12 @@ public:
     Vec3 normalAt(const Vec3& worldPoint) const override;
     bool raycast(const Ray& ray, PickHit& outHit) const override;
     AABB bounds() const override;
+    SurfaceRenderMesh buildRenderMesh() const override;
+
+    const SurfaceMaterialParams& material() const override { return material_; }
+    SurfaceMaterialParams& material() override { return material_; }
+    const SurfaceRenderParams& renderParams() const override { return renderParams_; }
+    SurfaceRenderParams& renderParams() override { return renderParams_; }
 
     const Vec3& origin() const { return origin_; }
     const Vec3& normal() const { return normal_; }
@@ -19,10 +25,14 @@ public:
     const Vec3& tangentV() const { return tangentV_; }
 
 private:
+    static constexpr double kRenderHalfExtent = 3.0;
+
     Vec3 origin_;
     Vec3 normal_;
     Vec3 tangentU_;
     Vec3 tangentV_;
+    SurfaceMaterialParams material_;
+    SurfaceRenderParams renderParams_;
 };
 
 } // namespace wd

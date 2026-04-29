@@ -58,6 +58,29 @@ struct MaterialParams {
     double volumeStiffness = 0.8;
 };
 
+struct SurfaceMaterialParams {
+    Vec3 solidVelocity = Vec3::Zero();
+    double friction = 0.05;
+
+    double advContactAngleDeg = 90.0;
+    double recContactAngleDeg = 30.0;
+    double contactStiffness = 0.5;
+
+    double adhesionDistance = 0.05;
+};
+
+struct SurfaceRenderParams {
+    double ior = 1.52;
+    double opacity = 0.32;
+    Vec3 tintColor = Vec3(0.78, 0.90, 1.0);
+};
+
+struct SurfaceRenderMesh {
+    MatX3d positions;
+    MatX3d normals;
+    MatX3i faces;
+};
+
 struct SolverParams {
     double dt = 1.0 / 120.0;
     int substeps = 1;

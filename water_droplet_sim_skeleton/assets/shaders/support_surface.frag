@@ -1,8 +1,13 @@
 #version 330 core
+in vec3 vWorldPosition;
 in vec3 vWorldNormal;
 out vec4 FragColor;
 
 uniform sampler2D uEnvironmentMap;
+uniform vec3 uCameraPos;
+uniform float uIor;
+uniform float uOpacity;
+uniform vec3 uTintColor;
 
 const float kPi = 3.14159265359;
 
@@ -20,8 +25,16 @@ vec3 toneMap(vec3 color) {
 
 void main() {
     vec3 n = normalize(vWorldNormal);
+    vec3 viewDir = normalize(vWorldPosition - uCameraPos);
     vec3 envAmbient = toneMap(texture(uEnvironmentMap, equirectUv(n)).rgb);
-    vec3 base = vec3(0.34, 0.36, 0.34);
-    vec3 ambient = mix(vec3(0.38), envAmbient, 0.62);
-    FragColor = vec4(base * ambient, 1.0);
+    vec3 reflected = toneMap(texture(uEnvironmentMap, equirectUv(reflect(viewDir, n))).rgb);
+
+    float ndotv = clamp(dot(n, -viewDir), 0.0, 1.0);
+    float eta = max(uIor, 1.0001);
+    float f0 = pow((1.0 - eta) / (1.0 + eta), 2.0);
+    float fresnel = f0 + (1.0 - f0) * pow(1.0 - ndotv, 5.0);
+
+    vec3 tintedTransmission = uTintColor * mix(vec3(0.55), envAmbient, 0.45);
+    vec3 color = mix(tintedTransmission, reflected, clamp(fresnel, 0.0, 1.0));
+    FragColor = vec4(color, clamp(uOpacity, 0.0, 1.0));
 }

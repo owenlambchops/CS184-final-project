@@ -62,6 +62,47 @@ AABB HeightFieldSurface::bounds() const {
     return b;
 }
 
+SurfaceRenderMesh HeightFieldSurface::buildRenderMesh() const {
+    SurfaceRenderMesh mesh;
+    const int rows = static_cast<int>(heights_.rows());
+    const int cols = static_cast<int>(heights_.cols());
+    if (rows <= 0 || cols <= 0) {
+        mesh.positions.resize(0, 3);
+        mesh.normals.resize(0, 3);
+        mesh.faces.resize(0, 3);
+        return mesh;
+    }
+
+    mesh.positions.resize(rows * cols, 3);
+    mesh.normals.resize(rows * cols, 3);
+    for (int x = 0; x < rows; ++x) {
+        for (int z = 0; z < cols; ++z) {
+            int idx = x * cols + z;
+            const double worldX = origin_.x() + static_cast<double>(x) * dx_;
+            const double worldZ = origin_.z() + static_cast<double>(z) * dz_;
+            const double localX = worldX - origin_.x();
+            const double localZ = worldZ - origin_.z();
+            mesh.positions.row(idx) = Vec3(worldX, origin_.y() + sampleHeight(localX, localZ), worldZ).transpose();
+            mesh.normals.row(idx) = gradientNormal(localX, localZ).transpose();
+        }
+    }
+
+    const int faceCount = std::max(0, rows - 1) * std::max(0, cols - 1) * 2;
+    mesh.faces.resize(faceCount, 3);
+    int f = 0;
+    for (int x = 0; x + 1 < rows; ++x) {
+        for (int z = 0; z + 1 < cols; ++z) {
+            int i00 = x * cols + z;
+            int i10 = (x + 1) * cols + z;
+            int i01 = x * cols + z + 1;
+            int i11 = (x + 1) * cols + z + 1;
+            mesh.faces.row(f++) = Eigen::RowVector3i(i00, i10, i11);
+            mesh.faces.row(f++) = Eigen::RowVector3i(i00, i11, i01);
+        }
+    }
+    return mesh;
+}
+
 double HeightFieldSurface::sampleHeight(double x, double z) const {
     if (heights_.rows() == 0 || heights_.cols() == 0) return 0.0;
 

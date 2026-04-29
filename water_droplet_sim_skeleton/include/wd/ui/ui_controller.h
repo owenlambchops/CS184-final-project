@@ -16,6 +16,8 @@ public:
     UiActions draw(SolverParams& solverParams,
                    RenderParams& renderParams,
                    MaterialParams& defaultMaterial,
+                   SurfaceMaterialParams& surfaceMaterial,
+                   SurfaceRenderParams& surfaceRender,
                    const Vec3& gravityLikeForce,
                    MergeSplitController& mergeSplit);
 

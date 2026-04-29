@@ -11,6 +11,7 @@
 #include <iostream>
 #include <numbers>
 #include <string>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -25,14 +26,6 @@ glm::vec3 toGlm(const Vec3& v) {
                      static_cast<float>(v.z()));
 }
 
-constexpr std::array<float, 24> kPlaneVertices = {
-    -3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-    -3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-};
-
-constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
 constexpr const char* kEnvironmentPath = "assets/static/suburban_garden_4k.hdr";
 constexpr float kCameraNearPlane = 0.1f;
 constexpr float kCameraFarPlane = 100.0f;
@@ -215,33 +208,22 @@ bool RefractiveRenderer::initializeBasicResources() {
         return false;
     }
 
-    initializePlaneMesh();
+    initializeSurfaceMeshBuffers();
     glGenVertexArrays(1, &fullscreenVao_);
 
-    return planeVao_ != 0 && planeEbo_ != 0 && fullscreenVao_ != 0 &&
+    return surfaceVao_ != 0 && surfaceEbo_ != 0 && fullscreenVao_ != 0 &&
            initializeEnvironmentMap() && createRenderTargets();
 }
 
-void RefractiveRenderer::initializePlaneMesh() {
-    planeIndexCount_ = static_cast<int>(kPlaneIndices.size());
+void RefractiveRenderer::initializeSurfaceMeshBuffers() {
+    glGenVertexArrays(1, &surfaceVao_);
+    glGenBuffers(1, &surfaceVbo_);
+    glGenBuffers(1, &surfaceEbo_);
 
-    glGenVertexArrays(1, &planeVao_);
-    glGenBuffers(1, &planeVbo_);
-    glGenBuffers(1, &planeEbo_);
+    glBindVertexArray(surfaceVao_);
 
-    glBindVertexArray(planeVao_);
-
-    glBindBuffer(GL_ARRAY_BUFFER, planeVbo_);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneVertices.size() * sizeof(float)),
-                 kPlaneVertices.data(),
-                 GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeEbo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneIndices.size() * sizeof(unsigned int)),
-                 kPlaneIndices.data(),
-                 GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, surfaceVbo_);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, surfaceEbo_);
 
     constexpr int stride = 6 * static_cast<int>(sizeof(float));
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
@@ -249,6 +231,53 @@ void RefractiveRenderer::initializePlaneMesh() {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void RefractiveRenderer::syncSurfaceMesh(const ISurface& surface) {
+    if (surfaceVao_ == 0 || surfaceVbo_ == 0 || surfaceEbo_ == 0) return;
+
+    const SurfaceRenderMesh mesh = surface.buildRenderMesh();
+    if (mesh.positions.rows() == 0 || mesh.faces.rows() == 0 ||
+        mesh.positions.rows() != mesh.normals.rows()) {
+        surfaceIndexCount_ = 0;
+        return;
+    }
+
+    std::vector<float> vertices;
+    vertices.reserve(static_cast<size_t>(mesh.positions.rows()) * 6);
+    for (int i = 0; i < mesh.positions.rows(); ++i) {
+        Vec3 p = mesh.positions.row(i).transpose();
+        Vec3 n = mesh.normals.row(i).transpose();
+        vertices.push_back(static_cast<float>(p.x()));
+        vertices.push_back(static_cast<float>(p.y()));
+        vertices.push_back(static_cast<float>(p.z()));
+        vertices.push_back(static_cast<float>(n.x()));
+        vertices.push_back(static_cast<float>(n.y()));
+        vertices.push_back(static_cast<float>(n.z()));
+    }
+
+    std::vector<unsigned int> indices;
+    indices.reserve(static_cast<size_t>(mesh.faces.rows()) * 3);
+    for (int i = 0; i < mesh.faces.rows(); ++i) {
+        indices.push_back(static_cast<unsigned int>(mesh.faces(i, 0)));
+        indices.push_back(static_cast<unsigned int>(mesh.faces(i, 1)));
+        indices.push_back(static_cast<unsigned int>(mesh.faces(i, 2)));
+    }
+    surfaceIndexCount_ = static_cast<int>(indices.size());
+
+    glBindVertexArray(surfaceVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, surfaceVbo_);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(vertices.size() * sizeof(float)),
+                 vertices.data(),
+                 GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, surfaceEbo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
+                 indices.data(),
+                 GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
@@ -419,16 +448,16 @@ void RefractiveRenderer::releaseResources() {
     releaseRenderTargets();
     dropletCache_.clear();
 
-    if (planeEbo_ != 0) glDeleteBuffers(1, &planeEbo_);
-    if (planeVbo_ != 0) glDeleteBuffers(1, &planeVbo_);
-    if (planeVao_ != 0) glDeleteVertexArrays(1, &planeVao_);
+    if (surfaceEbo_ != 0) glDeleteBuffers(1, &surfaceEbo_);
+    if (surfaceVbo_ != 0) glDeleteBuffers(1, &surfaceVbo_);
+    if (surfaceVao_ != 0) glDeleteVertexArrays(1, &surfaceVao_);
     if (fullscreenVao_ != 0) glDeleteVertexArrays(1, &fullscreenVao_);
 
-    planeVao_ = 0;
-    planeVbo_ = 0;
-    planeEbo_ = 0;
+    surfaceVao_ = 0;
+    surfaceVbo_ = 0;
+    surfaceEbo_ = 0;
     fullscreenVao_ = 0;
-    planeIndexCount_ = 0;
+    surfaceIndexCount_ = 0;
 
     supportSurfaceShader_.reset();
     backgroundShader_.reset();
@@ -461,7 +490,7 @@ void RefractiveRenderer::renderEnvironmentBackground(const Camera& camera) {
     glUseProgram(0);
 }
 
-void RefractiveRenderer::renderSceneColorDepth(const Scene&, const Camera& camera) {
+void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera& camera) {
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
     glViewport(0, 0, std::max(width_, 1), std::max(height_, 1));
     glEnable(GL_DEPTH_TEST);
@@ -473,19 +502,33 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene&, const Camera& camer
     const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
     renderEnvironmentBackground(camera);
 
-    if (supportSurfaceShader_.id() != 0 && planeVao_ != 0) {
+    if (scene.hasSurface()) {
+        syncSurfaceMesh(scene.surface());
+    }
+
+    if (scene.hasSurface() && supportSurfaceShader_.id() != 0 &&
+        surfaceVao_ != 0 && surfaceIndexCount_ > 0) {
+        const SurfaceRenderParams& surfaceRender = scene.surface().renderParams();
+
         supportSurfaceShader_.use();
         supportSurfaceShader_.setInt("uEnvironmentMap", 0);
         supportSurfaceShader_.setMat4("uModel", matrices.model);
         supportSurfaceShader_.setMat4("uView", matrices.view);
         supportSurfaceShader_.setMat4("uProj", matrices.proj);
+        supportSurfaceShader_.setVec3("uCameraPos", matrices.eye);
+        supportSurfaceShader_.setFloat("uIor", static_cast<float>(surfaceRender.ior));
+        supportSurfaceShader_.setFloat("uOpacity", static_cast<float>(surfaceRender.opacity));
+        supportSurfaceShader_.setVec3("uTintColor", toGlm(surfaceRender.tintColor));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, environmentTex_);
 
-        glBindVertexArray(planeVao_);
-        glDrawElements(GL_TRIANGLES, planeIndexCount_, GL_UNSIGNED_INT, nullptr);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBindVertexArray(surfaceVao_);
+        glDrawElements(GL_TRIANGLES, surfaceIndexCount_, GL_UNSIGNED_INT, nullptr);
         glBindVertexArray(0);
+        glDisable(GL_BLEND);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 

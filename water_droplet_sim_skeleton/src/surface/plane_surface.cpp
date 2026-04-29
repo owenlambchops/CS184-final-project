@@ -53,4 +53,26 @@ AABB PlaneSurface::bounds() const {
     return b;
 }
 
+SurfaceRenderMesh PlaneSurface::buildRenderMesh() const {
+    SurfaceRenderMesh mesh;
+    mesh.positions.resize(4, 3);
+    mesh.normals.resize(4, 3);
+    mesh.faces.resize(2, 3);
+
+    const Vec3 u = kRenderHalfExtent * tangentU_;
+    const Vec3 v = kRenderHalfExtent * tangentV_;
+    mesh.positions.row(0) = (origin_ - u - v).transpose();
+    mesh.positions.row(1) = (origin_ + u - v).transpose();
+    mesh.positions.row(2) = (origin_ + u + v).transpose();
+    mesh.positions.row(3) = (origin_ - u + v).transpose();
+
+    for (int i = 0; i < mesh.normals.rows(); ++i) {
+        mesh.normals.row(i) = normal_.transpose();
+    }
+
+    mesh.faces << 0, 1, 2,
+                  0, 2, 3;
+    return mesh;
+}
+
 } // namespace wd

@@ -41,7 +41,8 @@ public:
 
 private:
     bool initializeBasicResources();
-    void initializePlaneMesh();
+    void initializeSurfaceMeshBuffers();
+    void syncSurfaceMesh(const ISurface& surface);
     bool createRenderTargets();
     bool initializeEnvironmentMap();
     void releaseEnvironmentMap();
@@ -59,9 +60,9 @@ private:
     Shader backgroundShader_;
     Shader dropletGBufferShader_;
     Shader compositeShader_;
-    unsigned int planeVao_ = 0;
-    unsigned int planeVbo_ = 0;
-    unsigned int planeEbo_ = 0;
+    unsigned int surfaceVao_ = 0;
+    unsigned int surfaceVbo_ = 0;
+    unsigned int surfaceEbo_ = 0;
     unsigned int fullscreenVao_ = 0;
 
     unsigned int sceneFbo_ = 0;
@@ -75,7 +76,7 @@ private:
 
     unsigned int environmentTex_ = 0;
 
-    int planeIndexCount_ = 0;
+    int surfaceIndexCount_ = 0;
     int width_ = 0;
     int height_ = 0;
 };

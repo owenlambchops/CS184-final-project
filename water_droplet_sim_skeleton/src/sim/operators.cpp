@@ -128,10 +128,12 @@ void ExternalForceOperator::apply(
 }
 
 void CollisionProjector::apply(
-    Droplet& drop, const ISurface& surface, double pushoutEps, double adhesionDist, double dt) const {
+    Droplet& drop, const ISurface& surface, double pushoutEps, double, double dt) const {
     auto& X = drop.positions();
     auto& U = drop.velocities();
-    double frictionCoeff = std::max(0.0, drop.material().friction);
+    const SurfaceMaterialParams& surfaceMaterial = surface.material();
+    double adhesionDist = std::max(0.0, surfaceMaterial.adhesionDistance);
+    double frictionCoeff = std::max(0.0, surfaceMaterial.friction);
     double horizDamping = std::max(0.0, 1.0 - 0.05 * dt);
 
     for (int i = 0; i < X.rows(); ++i) {
@@ -140,30 +142,34 @@ void CollisionProjector::apply(
         if (s.signedDistance <= adhesionDist) {
             Vec3 v = U.row(i).transpose();
 
-            // Collision and bounce only when penetrating the surface.
+            // Collision response only when penetrating the surface.
             if (s.signedDistance < 0.0) {
                 X.row(i) = (s.position + pushoutEps * s.normal).transpose();
-                double vn = v.dot(s.normal);
+                Vec3 relative = v - surfaceMaterial.solidVelocity;
+                double vn = relative.dot(s.normal);
                 if (vn < 0.0) {
-                    v -= 1.2 * vn * s.normal;
+                    relative -= vn * s.normal;
+                    v = surfaceMaterial.solidVelocity + relative;
                 }
             }
 
             // Sliding friction / surface adhesion in the tangent plane.
-            Vec3 vTan = tangentComponent(v, s.normal);
+            Vec3 relative = v - surfaceMaterial.solidVelocity;
+            Vec3 vTan = tangentComponent(relative, s.normal);
             double speed = vTan.norm();
             if (speed > 0.0) {
                 double dropSpeed = frictionCoeff * dt;
                 if (speed < dropSpeed) {
-                    v -= vTan;
+                    relative -= vTan;
                 } else {
-                    v -= (dropSpeed / speed) * vTan;
+                    relative -= (dropSpeed / speed) * vTan;
                 }
             }
 
             // Simple linear damping for tangential velocity.
-            vTan = tangentComponent(v, s.normal);
-            v = v.dot(s.normal) * s.normal + horizDamping * vTan;
+            vTan = tangentComponent(relative, s.normal);
+            relative = relative.dot(s.normal) * s.normal + horizDamping * vTan;
+            v = surfaceMaterial.solidVelocity + relative;
             U.row(i) = v.transpose();
         }
     }
@@ -205,16 +211,18 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface& surface, double
     U += (dt / density) * (fSt + fVol);
 }
 
-void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
+void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
     const auto& normals = drop.derived().vertexNormals;
+    const SurfaceMaterialParams& surfaceMaterial = surface.material();
+    double adhesionDist = std::max(0.0, surfaceMaterial.adhesionDistance);
 
-    double alpha = std::max(0.0, drop.material().contactStiffness);
+    double alpha = std::max(0.0, surfaceMaterial.contactStiffness);
     if (alpha <= 0.0) return;
 
-    double receding = degToRad(drop.material().recContactAngleDeg);
-    double advancing = degToRad(drop.material().advContactAngleDeg);
+    double receding = degToRad(surfaceMaterial.recContactAngleDeg);
+    double advancing = degToRad(surfaceMaterial.advContactAngleDeg);
     if (receding > advancing) std::swap(receding, advancing);
 
     double density = std::max(drop.material().density, 1e-8);
