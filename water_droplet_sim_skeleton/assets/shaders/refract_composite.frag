@@ -18,12 +18,12 @@ uniform float uRefractionScale;
 uniform float uFresnelBias;
 uniform float uFresnelScale;
 uniform float uFresnelPower;
+uniform float uMaxThickness;
+uniform float uDebugDepthRange;
+uniform float uAbsorptionStrength;
+uniform vec3 uAbsorptionColor;
 
 const float kPi = 3.14159265359;
-const float kMaxThickness = 1.0;
-const float kDebugDepthRange = 8.0;
-const float kAbsorptionStrength = 1.35;
-const vec3 kAbsorptionColor = vec3(0.65, 0.24, 0.10);
 const int kDebugFinal = 0;
 const int kDebugSceneColor = 1;
 const int kDebugEnvironmentMap = 2;
@@ -59,21 +59,21 @@ float estimateThickness() {
 
     float sceneLinear = linearizeDepth(sceneDepth);
     float dropletLinear = linearizeDepth(dropletDepth);
-    return clamp(sceneLinear - dropletLinear, 0.0, kMaxThickness);
+    return clamp(sceneLinear - dropletLinear, 0.0, uMaxThickness);
 }
 
 float visualizeSceneDepth(float depth) {
     if (depth >= 0.9999) {
         return 0.0;
     }
-    return 1.0 - clamp(linearizeDepth(depth) / kDebugDepthRange, 0.0, 1.0);
+    return 1.0 - clamp(linearizeDepth(depth) / uDebugDepthRange, 0.0, 1.0);
 }
 
 float visualizeDropletDepth(float depth) {
     if (depth >= 0.9999) {
         return 0.0;
     }
-    return 1.0 - clamp(linearizeDepth(depth) / kDebugDepthRange, 0.0, 1.0);
+    return 1.0 - clamp(linearizeDepth(depth) / uDebugDepthRange, 0.0, 1.0);
 }
 
 void main() {
@@ -132,7 +132,7 @@ void main() {
     vec3 refracted = texture(uSceneColor, refractUv).rgb;
     if (uEnableThickness != 0) {
         float thickness = estimateThickness();
-        vec3 attenuation = exp(-kAbsorptionColor * thickness * kAbsorptionStrength);
+        vec3 attenuation = exp(-uAbsorptionColor * thickness * uAbsorptionStrength);
         refracted *= attenuation;
     }
 

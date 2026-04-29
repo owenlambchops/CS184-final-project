@@ -91,6 +91,10 @@ struct RenderParams {
     double fresnelPower = 5.0;
 
     double refractionScale = 0.03;
+    double maxThickness = 1.0;
+    double debugDepthRange = 8.0;
+    double absorptionStrength = 1.35;
+    Vec3 absorptionColor = Vec3(0.65, 0.24, 0.10);
     bool enableThickness = true;
     RenderDebugView debugView = RenderDebugView::Final;
 };
