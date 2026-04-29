@@ -7,6 +7,7 @@ uniform sampler2D uDropletNormal;
 uniform sampler2D uEnvironmentMap;
 uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
+uniform mat4 uInvProj;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
 uniform float uIor;
@@ -62,6 +63,9 @@ void main() {
 
     vec3 encN = normalSample.xyz;
     vec3 n = normalize(encN * 2.0 - 1.0);
+    vec2 ndc = vUv * 2.0 - 1.0;
+    vec4 view = uInvProj * vec4(ndc, 1.0, 1.0);
+    vec3 viewDir = normalize(view.xyz / view.w);
 
     vec2 offset = n.xy * uRefractionScale;
     vec2 refractUv = clamp(vUv + offset, vec2(0.0), vec2(1.0));
@@ -72,13 +76,13 @@ void main() {
         refracted *= attenuation;
     }
 
-    float ndotv = clamp(n.z, 0.0, 1.0);
+    float ndotv = clamp(dot(n, -viewDir), 0.0, 1.0);
     float eta = max(uIor, 1.0001);
     float f0 = pow((1.0 - eta) / (1.0 + eta), 2.0);
     float fresnel = f0 + (1.0 - f0) * pow(1.0 - ndotv, uFresnelPower);
     fresnel = clamp(uFresnelBias + uFresnelScale * fresnel, 0.0, 1.0);
 
-    vec3 reflectView = reflect(vec3(0.0, 0.0, -1.0), n);
+    vec3 reflectView = reflect(viewDir, n);
     vec3 reflectWorld = normalize(uInvViewRot * reflectView);
     vec3 envReflection = toneMap(texture(uEnvironmentMap, equirectUv(reflectWorld)).rgb);
 
