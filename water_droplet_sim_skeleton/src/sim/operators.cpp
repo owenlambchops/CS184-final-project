@@ -29,13 +29,11 @@ std::vector<std::vector<int>> buildAdjacency(const Droplet& d) {
     return adj;
 }
 // Equivalent to compute_cotangent_weights()
-std::vector<std::map<int, double>> compute_cotangent_weights(const std::vector<Vec3>& x, const std::vector<std::vector<int>>& faces) {
-    Weights w;
-    for (const auto& f : faces) {
-        int i0 = f[0], i1 = f[1], i2 = f[2];
-        Vec3 v0 = x[i0], v1 = x[i1], v2 = x[i2];
-
-        Vec3 e0 = v1 - v0, e1 = v2 - v1, e2 = v0 - v2;
+std::vector<std::map<int, double>> compute_cotangent_weights(const MatX3d& x, const MatX3i& faces) {
+    std::vector<std::map<int, double>> w(static_cast<size_t>(x.rows()));
+    for (int fi = 0; fi < faces.rows(); ++fi) {
+        int i0 = faces(fi, 0), i1 = faces(fi, 1), i2 = faces(fi, 2);
+        Vec3 v0 = x.row(i0).transpose(), v1 = x.row(i1).transpose(), v2 = x.row(i2).transpose();
         
         // Cotangents via dot / norm of cross
         auto get_cot = [](Vec3 a, Vec3 b) {
