@@ -7,7 +7,7 @@ uniform sampler2D uDropletNormal;
 uniform sampler2D uEnvironmentMap;
 uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
-uniform mat4 uInvViewRot;
+uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
 uniform float uIor;
 uniform float uNearPlane;
@@ -16,7 +16,6 @@ uniform float uRefractionScale;
 uniform float uFresnelBias;
 uniform float uFresnelScale;
 uniform float uFresnelPower;
-uniform float uSpecularPower;
 
 const float kPi = 3.14159265359;
 const float kMaxThickness = 1.0;
@@ -80,16 +79,10 @@ void main() {
     fresnel = clamp(uFresnelBias + uFresnelScale * fresnel, 0.0, 1.0);
 
     vec3 reflectView = reflect(vec3(0.0, 0.0, -1.0), n);
-    vec3 reflectWorld = normalize(mat3(uInvViewRot) * reflectView);
+    vec3 reflectWorld = normalize(uInvViewRot * reflectView);
     vec3 envReflection = toneMap(texture(uEnvironmentMap, equirectUv(reflectWorld)).rgb);
 
-    vec3 lightDir = normalize(vec3(-0.35, 0.45, 0.82));
-    vec3 viewDir = vec3(0.0, 0.0, 1.0);
-    vec3 halfDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(n, halfDir), 0.0), uSpecularPower);
-
-    vec3 color = mix(refracted, envReflection, fresnel)
-               + vec3(1.0) * spec * 0.45;
+    vec3 color = mix(refracted, envReflection, fresnel);
 
     FragColor = vec4(color, 1.0);
 }

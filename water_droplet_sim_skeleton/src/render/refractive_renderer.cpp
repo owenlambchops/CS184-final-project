@@ -54,8 +54,8 @@ CameraMatrices buildCameraMatrices(const Camera& camera, int width, int height) 
     return matrices;
 }
 
-glm::mat4 inverseViewRotation(const glm::mat4& view) {
-    return glm::mat4(glm::mat3(glm::inverse(view)));
+glm::mat3 inverseViewRotation(const glm::mat4& view) {
+    return glm::mat3(glm::inverse(view));
 }
 
 const char* framebufferStatusName(unsigned int status) {
@@ -443,7 +443,7 @@ void RefractiveRenderer::renderEnvironmentBackground(const Camera& camera) {
     backgroundShader_.use();
     backgroundShader_.setInt("uEnvironmentMap", 0);
     backgroundShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
-    backgroundShader_.setMat4("uInvViewRot", inverseViewRotation(matrices.view));
+    backgroundShader_.setMat3("uInvViewRot", inverseViewRotation(matrices.view));
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -475,13 +475,18 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene&, const Camera& camer
 
     if (supportSurfaceShader_.id() != 0 && planeVao_ != 0) {
         supportSurfaceShader_.use();
+        supportSurfaceShader_.setInt("uEnvironmentMap", 0);
         supportSurfaceShader_.setMat4("uModel", matrices.model);
         supportSurfaceShader_.setMat4("uView", matrices.view);
         supportSurfaceShader_.setMat4("uProj", matrices.proj);
 
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, environmentTex_);
+
         glBindVertexArray(planeVao_);
         glDrawElements(GL_TRIANGLES, planeIndexCount_, GL_UNSIGNED_INT, nullptr);
         glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 
     glUseProgram(0);
@@ -532,7 +537,7 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setInt("uSceneDepth", 3);
         compositeShader_.setInt("uDropletDepth", 4);
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
-        compositeShader_.setMat4("uInvViewRot", inverseViewRotation(matrices.view));
+        compositeShader_.setMat3("uInvViewRot", inverseViewRotation(matrices.view));
         compositeShader_.setFloat("uIor", static_cast<float>(params.ior));
         compositeShader_.setFloat("uNearPlane", kCameraNearPlane);
         compositeShader_.setFloat("uFarPlane", kCameraFarPlane);
@@ -540,7 +545,6 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setFloat("uFresnelBias", static_cast<float>(params.fresnelBias));
         compositeShader_.setFloat("uFresnelScale", static_cast<float>(params.fresnelScale));
         compositeShader_.setFloat("uFresnelPower", static_cast<float>(params.fresnelPower));
-        compositeShader_.setFloat("uSpecularPower", static_cast<float>(params.specularPower));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sceneColorTex_);

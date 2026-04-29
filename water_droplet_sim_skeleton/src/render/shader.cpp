@@ -109,6 +109,11 @@ void Shader::reset() {
     program_ = 0;
 }
 
+void Shader::setMat3(const char* name, const glm::mat3& value) const {
+    const int location = uniformLocation(name);
+    if (location >= 0) glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(value));
+}
+
 void Shader::setMat4(const char* name, const glm::mat4& value) const {
     const int location = uniformLocation(name);
     if (location >= 0) glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));

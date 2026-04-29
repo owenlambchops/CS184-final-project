@@ -4,7 +4,7 @@ out vec4 FragColor;
 
 uniform sampler2D uEnvironmentMap;
 uniform mat4 uInvProj;
-uniform mat4 uInvViewRot;
+uniform mat3 uInvViewRot;
 
 const float kPi = 3.14159265359;
 
@@ -24,7 +24,7 @@ void main() {
     vec2 ndc = vUv * 2.0 - 1.0;
     vec4 view = uInvProj * vec4(ndc, 1.0, 1.0);
     vec3 viewDir = normalize(view.xyz / view.w);
-    vec3 worldDir = normalize(mat3(uInvViewRot) * viewDir);
+    vec3 worldDir = normalize(uInvViewRot * viewDir);
 
     vec3 hdr = texture(uEnvironmentMap, equirectUv(worldDir)).rgb;
     FragColor = vec4(toneMap(hdr), 1.0);

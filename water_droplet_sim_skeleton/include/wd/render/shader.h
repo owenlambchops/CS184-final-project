@@ -21,6 +21,7 @@ public:
 
     unsigned int id() const { return program_; }
 
+    void setMat3(const char* name, const glm::mat3& value) const;
     void setMat4(const char* name, const glm::mat4& value) const;
     void setVec3(const char* name, const glm::vec3& value) const;
     void setFloat(const char* name, float value) const;

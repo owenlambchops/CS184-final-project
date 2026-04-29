@@ -81,7 +81,6 @@ struct RenderParams {
     double fresnelPower = 5.0;
 
     double refractionScale = 0.03;
-    double specularPower = 64.0;
     bool enableThickness = true;
 };
 

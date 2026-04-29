@@ -10,9 +10,9 @@
 2. **先做“静态水滴 mesh 的折射”，再接 solver。**
    不要一开始就和 simulation 同步调试。先拿一个固定半球/球冠 mesh，证明你的 renderer 能输出“像水”的结果。你这一步的目标只有三个：能读 `sceneColor`，能得到水滴表面的 view-space normal，能正确写入和比较 depth。这样做的好处是，你可以把渲染问题和仿真问题彻底隔离。Green 的资料把整体思路说得很直白：表面着色需要位置、法线、深度和与场景的正确深度合并；你们只是跳过了前面的“从粒子深度重建表面”那一步。
 
-3. **核心 shader：refraction + Fresnel + specular。**
+3. **核心 shader：refraction + Fresnel reflection。**
    折射最实用的实时做法不是物理追踪，而是 **用法线去扰动背景纹理坐标**。GPU Gems 2 的通用折射章节给的就是这条路线：先渲染非折射场景到纹理 `S`，再在折射物体 pass 中用法线贴图/法线方向对采样坐标做小位移。你们这里没有 normal map，而是直接用水滴 mesh 的表面法线即可。反射部分用 Fresnel 混合，最省事的是 Schlick 近似：`F = F0 + (1 - F0)(1 - dot(N, V))^5`。NVIDIA 的 Schlick 章节给出了这个公式，并指出水的折射率大约是 `η = 1.333`；用 `R0 = ((η1 - η2)/(η1 + η2))^2` 算，空气-水边界的 `F0` 大约是 `0.0204`。所以你第一版完全可以写成：
-   `final = (1 - F) * refractedColor + F * reflectedColor + specular`。([NVIDIA Developer][3])
+   `final = (1 - F) * refractedColor + F * reflectedColor`。([NVIDIA Developer][3])
 
 4. **加 thickness；这是“像水”与“不像水”的分水岭。**
    Green 的 slides 明确指出：只渲染离摄像机最近的那一层表面时，透明流体看起来会怪，因为你看不到前表面后面的液体层；一个有效补救是用 **thickness through volume** 去做颜色衰减。你们不是粒子流体，但这个思想完全可以借过来。最适合 mesh 水滴的做法，是渲染一对 front/back depth，然后把两者差值近似为 thickness；Imai 那篇更进一步，把 front-facing 和 back-facing surface 的 depth maps 成对生成，用多层 refraction 和 Beer–Lambert attenuation 提高真实感。你们 baseline 不需要做到四层折射，但**front/back depth -> thickness -> attenuation** 这条线非常值得借鉴。([NVIDIA Developer Download][4])
@@ -46,7 +46,7 @@
 - 可选 thickness/front-back depth
 
 `assets/shaders/refract_composite.vert/.frag`
-最终合成 pass。读 `sceneColor`、`sceneDepth`、`dropletNormal`、`dropletThickness`，做折射偏移、Fresnel、reflection/specular、透明度/吸收。
+最终合成 pass。读 `sceneColor`、`sceneDepth`、`dropletNormal`、`dropletThickness`，做折射偏移、Fresnel reflection、透明度/吸收。
 
 ---
 
@@ -110,7 +110,7 @@ Imai 的四层深度图方案是更高级的效果线，不适合你一上来就
 
 1. `scene pass` 输出 `sceneColor + sceneDepth`
 2. `droplet pass` 输出 `normal + depth`
-3. `composite pass` 做 `refraction + Fresnel + specular`
+3. `composite pass` 做 `refraction + Fresnel reflection`
 4. 增加 `thickness`
 5. 增加 debug views
 6. 最后再考虑 filter 和 polish
