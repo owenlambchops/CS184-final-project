@@ -28,44 +28,35 @@ std::vector<std::vector<int>> buildAdjacency(const Droplet& d) {
     }
     return adj;
 }
+// Equivalent to compute_cotangent_weights()
+std::vector<std::map<int, double>> compute_cotangent_weights(const std::vector<Vec3>& x, const std::vector<std::vector<int>>& faces) {
+    Weights w;
+    for (const auto& f : faces) {
+        int i0 = f[0], i1 = f[1], i2 = f[2];
+        Vec3 v0 = x[i0], v1 = x[i1], v2 = x[i2];
 
-std::vector<std::map<int, double>> computeCotangentWeights(const Droplet& d) {
-    std::vector<std::map<int, double>> w(static_cast<size_t>(d.positions().rows()));
-    const auto& X = d.positions();
+        Vec3 e0 = v1 - v0, e1 = v2 - v1, e2 = v0 - v2;
+        
+        // Cotangents via dot / norm of cross
+        auto get_cot = [](Vec3 a, Vec3 b) {
+            Vec3 c = a.cross(b);
+            double n = c.norm();
+            if (n < 1e-10) return 0.0;
+            return a.dot(b) / n;
+        };
 
-    for (int f = 0; f < d.faces().rows(); ++f) {
-        int i0 = d.faces()(f, 0);
-        int i1 = d.faces()(f, 1);
-        int i2 = d.faces()(f, 2);
-
-        Vec3 x0 = X.row(i0).transpose();
-        Vec3 x1 = X.row(i1).transpose();
-        Vec3 x2 = X.row(i2).transpose();
-
-        Vec3 cross0 = (x1 - x0).cross(x2 - x0);
-        Vec3 cross1 = (x2 - x1).cross(x0 - x1);
-        Vec3 cross2 = (x0 - x2).cross(x1 - x2);
-
-        double norm0 = std::max(cross0.norm(), 1e-5);
-        double norm1 = std::max(cross1.norm(), 1e-5);
-        double norm2 = std::max(cross2.norm(), 1e-5);
-
-        double cot0 = (x1 - x0).dot(x2 - x0) / norm0;
-        double cot1 = (x2 - x1).dot(x0 - x1) / norm1;
-        double cot2 = (x0 - x2).dot(x1 - x2) / norm2;
+        double cot0 = get_cot(v1 - v0, v2 - v0);
+        double cot1 = get_cot(v2 - v1, v0 - v1);
+        double cot2 = get_cot(v0 - v2, v1 - v2);
 
         double w0 = std::max(0.0, cot2 / 2.0);
         double w1 = std::max(0.0, cot0 / 2.0);
         double w2 = std::max(0.0, cot1 / 2.0);
 
-        w[static_cast<size_t>(i0)][i1] += w0;
-        w[static_cast<size_t>(i1)][i0] += w0;
-        w[static_cast<size_t>(i1)][i2] += w1;
-        w[static_cast<size_t>(i2)][i1] += w1;
-        w[static_cast<size_t>(i2)][i0] += w2;
-        w[static_cast<size_t>(i0)][i2] += w2;
+        w[i0][i1] += w0; w[i1][i0] += w0;
+        w[i1][i2] += w1; w[i2][i1] += w1;
+        w[i2][i0] += w2; w[i0][i2] += w2;
     }
-
     return w;
 }
 
@@ -75,7 +66,7 @@ struct LaplacianContext {
 };
 
 LaplacianContext buildLaplacianContext(const Droplet& d) {
-    return {buildAdjacency(d), computeCotangentWeights(d)};
+    return {buildAdjacency(d), compute_cotangent_weights(d.positions(), d.faces())};
 }
 
 MatX3d computeLaplacian(const MatX3d& values, const std::vector<std::vector<int>>& adj,

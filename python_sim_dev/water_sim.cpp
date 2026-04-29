@@ -1,73 +1,48 @@
-#include <iostream>
 #include <vector>
 #include <cmath>
-#include <numeric>
 #include <algorithm>
 #include <map>
-#include <set>
 
-// Simple 3D Vector utility structure
-struct Vec3 {
-    double x, y, z;
+// --- libMesh Headers ---
+#include "libmesh/libmesh.h"
+#include "libmesh/mesh.h"
+#include "libmesh/mesh_generation.h"
+#include "libmesh/elem.h"
+#include "libmesh/node.h"
 
-    Vec3(double x = 0, double y = 0, double z = 0) : x(x), y(y), z(z) {}
-
-    Vec3 operator+(const Vec3& v) const { return Vec3(x + v.x, y + v.y, z + v.z); }
-    Vec3 operator-(const Vec3& v) const { return Vec3(x - v.x, y - v.y, z - v.z); }
-    Vec3 operator*(double s) const { return Vec3(x * s, y * s, z * s); }
-    Vec3 operator/(double s) const { return (s != 0) ? Vec3(x / s, y / s, z / s) : Vec3(0,0,0); }
-    
-    Vec3& operator+=(const Vec3& v) { x += v.x; y += v.y; z += v.z; return *this; }
-    Vec3& operator-=(const Vec3& v) { x -= v.x; y -= v.y; z -= v.z; return *this; }
-    Vec3& operator*=(double s) { x *= s; y *= s; z *= s; return *this; }
-    Vec3& operator/=(double s) { x /= s; y /= s; z /= s; return *this; }
-
-    double dot(const Vec3& v) const { return x * v.x + y * v.y + z * v.z; }
-    Vec3 cross(const Vec3& v) const {
-        return Vec3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
-    }
-    double norm() const { return std::sqrt(x * x + y * y + z * z); }
-    Vec3 normalized() const {
-        double n = norm();
-        return (n > 0) ? (*this / n) : Vec3(0, 0, 0);
-    }
-};
+#include "CGL/CGL.h"
+#include "CGL/vector3D.h"
+#include "CGL/viewer.h"
+#include "CGL/renderer.h"
+#include "CGL/misc.h"
 
 typedef std::vector<int> Face;
 typedef std::map<int, std::map<int, double>> Weights;
 
-// Equivalent to normalise()
-Vec3 normalise(const Vec3& vec) {
-    return vec.normalized();
-}
+// Container for our extracted simulation arrays
+struct SimState {
+    std::vector<Vector3D> x;
+    std::vector<Vector3D> v;
+    std::vector<Vector3D> a;
+    std::vector<Face> faces;
+    std::vector<std::vector<int>> neighbours;
+    double V_0; // Initial volume
+};
 
-// Equivalent to generate_points_on_sphere()
-std::vector<Vec3> generate_points_on_sphere(int n_pts, double r) {
-    std::vector<Vec3> points;
-    double goldenRatio = (1.0 + std::sqrt(5.0)) / 2.0;
-    for (int i = 0; i < n_pts; ++i) {
-        double theta = 2.0 * M_PI * i / goldenRatio;
-        double phi = std::acos(1.0 - 2.0 * i / (double)n_pts);
-        double x = std::cos(theta) * std::sin(phi);
-        double y = std::sin(theta) * std::sin(phi);
-        double z = std::cos(phi);
-        points.push_back(Vec3(x, y, z) * r);
-    }
-    return points;
-}
+
 
 // Equivalent to compute_cotangent_weights()
-Weights compute_cotangent_weights(const std::vector<Vec3>& x, const std::vector<Face>& faces) {
+Weights compute_cotangent_weights(const std::vector<Vector3D>& x, const std::vector<Face>& faces) {
     Weights w;
     for (const auto& f : faces) {
         int i0 = f[0], i1 = f[1], i2 = f[2];
-        Vec3 v0 = x[i0], v1 = x[i1], v2 = x[i2];
+        Vector3D v0 = x[i0], v1 = x[i1], v2 = x[i2];
 
-        Vec3 e0 = v1 - v0, e1 = v2 - v1, e2 = v0 - v2;
+        Vector3D e0 = v1 - v0, e1 = v2 - v1, e2 = v0 - v2;
         
         // Cotangents via dot / norm of cross
-        auto get_cot = [](Vec3 a, Vec3 b) {
-            Vec3 c = a.cross(b);
+        auto get_cot = [](Vector3D a, Vector3D b) {
+            Vector3D c = a.cross(b);
             double n = c.norm();
             if (n < 1e-10) return 0.0;
             return a.dot(b) / n;
@@ -89,17 +64,17 @@ Weights compute_cotangent_weights(const std::vector<Vec3>& x, const std::vector<
 }
 
 // Equivalent to compute_vertex_normals_and_volume()
-std::pair<std::vector<Vec3>, double> compute_vertex_normals_and_volume(const std::vector<Vec3>& x, const std::vector<Face>& faces) {
-    std::vector<Vec3> normals(x.size(), Vec3(0, 0, 0));
+std::pair<std::vector<Vector3D>, double> compute_vertex_normals_and_volume(const std::vector<Vector3D>& x, const std::vector<Face>& faces) {
+    std::vector<Vector3D> normals(x.size(), Vector3D(0, 0, 0));
     double V = 0.0;
-    Vec3 com(0, 0, 0);
+    Vector3D com(0, 0, 0);
     for (const auto& v : x) { com += v; }
     com /= (double)x.size();
 
     for (const auto& f : faces) {
         int i0 = f[0], i1 = f[1], i2 = f[2];
-        Vec3 x0 = x[i0], x1 = x[i1], x2 = x[i2];
-        Vec3 n_face = (x1 - x0).cross(x2 - x0);
+        Vector3D x0 = x[i0], x1 = x[i1], x2 = x[i2];
+        Vector3D n_face = (x1 - x0).cross(x2 - x0);
 
         if (n_face.dot(x0 - com) < 0) {
             n_face = n_face * -1.0;
@@ -119,11 +94,11 @@ std::pair<std::vector<Vec3>, double> compute_vertex_normals_and_volume(const std
 }
 
 // Equivalent to compute_laplacians()
-void compute_laplacians(const std::vector<Vec3>& x, const std::vector<Vec3>& v, 
+void compute_laplacians(const std::vector<Vector3D>& x, const std::vector<Vector3D>& v, 
                         const std::vector<std::vector<int>>& neighbours, const Weights& w,
-                        std::vector<Vec3>& delta_x, std::vector<Vec3>& delta_v) {
-    delta_x.assign(x.size(), Vec3(0, 0, 0));
-    delta_v.assign(v.size(), Vec3(0, 0, 0));
+                        std::vector<Vector3D>& delta_x, std::vector<Vector3D>& delta_v) {
+    delta_x.assign(x.size(), Vector3D(0, 0, 0));
+    delta_v.assign(v.size(), Vector3D(0, 0, 0));
 
     for (int i = 0; i < (int)x.size(); ++i) {
         double sum_w = 0.0;
@@ -147,7 +122,7 @@ void compute_laplacians(const std::vector<Vec3>& x, const std::vector<Vec3>& v,
 }
 
 // Equivalent to apply_surface_interactions()
-void apply_surface_interactions(std::vector<Vec3>& x, std::vector<Vec3>& v, 
+void apply_surface_interactions(std::vector<Vector3D>& x, std::vector<Vector3D>& v, 
                                 double dt, double friction_coeff, double adhesion_dist) {
     for (int i = 0; i < (int)x.size(); ++i) {
         if (x[i].z <= adhesion_dist) {
@@ -156,7 +131,7 @@ void apply_surface_interactions(std::vector<Vec3>& x, std::vector<Vec3>& v,
                 if (v[i].z < 0) v[i].z *= -0.2;
             }
 
-            Vec3 v_horiz(v[i].x, v[i].y, 0);
+            Vector3D v_horiz(v[i].x, v[i].y, 0);
             double speed = v_horiz.norm();
             if (speed > 0) {
                 double drop = friction_coeff * dt;
@@ -176,21 +151,21 @@ void apply_surface_interactions(std::vector<Vec3>& x, std::vector<Vec3>& v,
 }
 
 // Equivalent to boundary_force()
-std::vector<Vec3> boundary_force(double alpha, const std::vector<Vec3>& n_l, 
+std::vector<Vector3D> boundary_force(double alpha, const std::vector<Vector3D>& n_l, 
                                 const std::vector<bool>& contact_mask, 
                                 double receding_angle, double advancing_angle) {
-    std::vector<Vec3> f_boundary(n_l.size(), Vec3(0, 0, 0));
-    Vec3 ground_normal(0, 0, 1);
+    std::vector<Vector3D> f_boundary(n_l.size(), Vector3D(0, 0, 0));
+    Vector3D ground_normal(0, 0, 1);
 
     for (int i = 0; i < (int)n_l.size(); ++i) {
         if (!contact_mask[i]) continue;
 
-        Vec3 n_li = n_l[i];
+        Vector3D n_li = n_l[i];
         double dot_val = std::max(-1.0, std::min(1.0, n_li.dot(ground_normal)));
         double angle = std::acos(dot_val);
 
-        Vec3 n_p = n_li - ground_normal * dot_val;
-        Vec3 n_p_dir = n_p.normalized();
+        Vector3D n_p = n_li - ground_normal * dot_val;
+        Vector3D n_p_dir = n_p.normalized();
 
         if (n_p_dir.norm() < 1e-10) continue;
 
@@ -206,28 +181,28 @@ std::vector<Vec3> boundary_force(double alpha, const std::vector<Vec3>& n_l,
 }
 
 // Equivalent to compute_accelerations()
-std::pair<std::vector<Vec3>, std::vector<Vec3>> compute_accelerations(
-    const std::vector<Vec3>& x, const std::vector<Vec3>& v, const std::vector<Face>& faces,
-    const std::vector<std::vector<int>>& neighbours, double V_0, Vec3 g, double gamma,
+std::pair<std::vector<Vector3D>, std::vector<Vector3D>> compute_accelerations(
+    const std::vector<Vector3D>& x, const std::vector<Vector3D>& v, const std::vector<Face>& faces,
+    const std::vector<std::vector<int>>& neighbours, double V_0, Vector3D g, double gamma,
     double k_v, double boundary_alpha, double receding_angle, double advancing_angle,
     double adhesion_dist, double max_internal_accel, double density) {
 
     Weights w = compute_cotangent_weights(x, faces);
     auto [n, V] = compute_vertex_normals_and_volume(x, faces);
     
-    std::vector<Vec3> delta_x, delta_v;
+    std::vector<Vector3D> delta_x, delta_v;
     compute_laplacians(x, v, neighbours, w, delta_x, delta_v);
 
     std::vector<bool> contact_mask(x.size());
     for (int i = 0; i < (int)x.size(); ++i) contact_mask[i] = (x[i].z <= adhesion_dist);
 
-    std::vector<Vec3> f_boundary = boundary_force(boundary_alpha, n, contact_mask, receding_angle, advancing_angle);
+    std::vector<Vector3D> f_boundary = boundary_force(boundary_alpha, n, contact_mask, receding_angle, advancing_angle);
 
-    std::vector<Vec3> a_total(x.size());
+    std::vector<Vector3D> a_total(x.size());
     for (int i = 0; i < (int)x.size(); ++i) {
-        Vec3 f_st = delta_x[i] * gamma;
-        Vec3 f_vol = n[i] * (k_v * (V_0 - V));
-        Vec3 a_internal = (f_st + f_vol + f_boundary[i]) / density;
+        Vector3D f_st = delta_x[i] * gamma;
+        Vector3D f_vol = n[i] * (k_v * (V_0 - V));
+        Vector3D a_internal = (f_st + f_vol + f_boundary[i]) / density;
 
         double a_int_norm = a_internal.norm();
         double scale = std::min(1.0, max_internal_accel / std::max(a_int_norm, 1e-8));
@@ -239,9 +214,9 @@ std::pair<std::vector<Vec3>, std::vector<Vec3>> compute_accelerations(
 }
 
 // Equivalent to update_forward_euler()
-void update_forward_euler(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vector<Vec3>& x,
+void update_forward_euler(std::vector<Vector3D>& a, std::vector<Vector3D>& v, std::vector<Vector3D>& x,
                         const std::vector<Face>& faces, const std::vector<std::vector<int>>& neighbours,
-                        double V_0, double dt, Vec3 g, double gamma, double mu, double eta, double k_v,
+                        double V_0, double dt, Vector3D g, double gamma, double mu, double eta, double k_v,
                         double friction_coeff, double boundary_alpha, double receding_angle, double advancing_angle,
                         double adhesion_dist, double max_internal_accel, double density, double damping_gain) {
     
@@ -252,7 +227,7 @@ void update_forward_euler(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vecto
     double mean_speed = 0;
     for (int i = 0; i < (int)x.size(); ++i) {
         // Base damping
-        Vec3 v_damped = v[i] * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
+        Vector3D v_damped = v[i] * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
 
         // Energy-aware damping
         double speed = v[i].norm();
@@ -283,13 +258,13 @@ void update_forward_euler(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vecto
 }
 
 // Logic matches Python's update_velocity_verlet()
-void update_velocity_verlet(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vector<Vec3>& x,
+void update_velocity_verlet(std::vector<Vector3D>& a, std::vector<Vector3D>& v, std::vector<Vector3D>& x,
                         const std::vector<Face>& faces, const std::vector<std::vector<int>>& neighbours,
-                        double V_0, double dt, Vec3 g, double gamma, double mu, double eta, double k_v,
+                        double V_0, double dt, Vector3D g, double gamma, double mu, double eta, double k_v,
                         double friction_coeff, double boundary_alpha, double receding_angle, double advancing_angle,
                         double adhesion_dist, double max_internal_accel, double density, double damping_gain) {
     
-    std::vector<Vec3> x_new(x.size());
+    std::vector<Vector3D> x_new(x.size());
     for (int i = 0; i < (int)x.size(); ++i) {
         x_new[i] = x[i] + v[i] * dt + a[i] * (dt * dt * 0.5);
     }
@@ -300,8 +275,8 @@ void update_velocity_verlet(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vec
 
     double mean_speed = 0;
     for (int i = 0; i < (int)x.size(); ++i) {
-        Vec3 v_new = v[i] + (a[i] + a_new[i]) * (dt * 0.5);
-        Vec3 v_damped = v_new * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
+        Vector3D v_new = v[i] + (a[i] + a_new[i]) * (dt * 0.5);
+        Vector3D v_damped = v_new * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
 
         double speed = v_new.norm();
         double lin = std::max(0.0, mu) * damping_gain;
@@ -326,29 +301,55 @@ void update_velocity_verlet(std::vector<Vec3>& a, std::vector<Vec3>& v, std::vec
     apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist);
 }
 
-int main() {
-    // Basic setup matching typical Python usage
-    int n_vertices = 40;
-    double radius = 1.0;
-    std::vector<Vec3> x = generate_points_on_sphere(n_vertices, radius);
-    std::vector<Vec3> v(n_vertices, Vec3(0, 0, 0));
-    std::vector<Vec3> a(n_vertices, Vec3(0, 0, 0));
 
-    // For a real simulation, faces would come from a ConvexHull algorithm 
-    // In this basic C++ stub, we assume a simple triangulation or placeholder
-    std::vector<Face> faces; 
-    // ... logic to populate faces and neighbours ...
-    std::vector<std::vector<int>> neighbours(n_vertices);
+/**
+ * Safely generates a libMesh sphere and extracts it into contiguous arrays
+ * suited for real-time physics iteration.
+ */
+SimState generate_physics_mesh(libMesh::Mesh& mesh, double radius, int segments) {
+    SimState state;
+    state.V_0 = 4.0/3.0 * M_PI * std::pow(radius, 3);
 
-    double V_0 = 4.0/3.0 * M_PI * std::pow(radius, 3);
-    double dt = 0.01;
-    Vec3 gravity(0, 0, -9.81);
+    // 1. Ask libMesh to build the geometry using 3-node triangles
+    libMesh::MeshTools::Generation::build_sphere(mesh, radius, segments, libMesh::TRI3);
+    mesh.prepare_for_use(); // Crucial: Finalizes element connectivity and nodal assignments
 
-    // Run one step of Euler
-    update_forward_euler(a, v, x, faces, neighbours, V_0, dt, gravity, 0.5, 0.3, 0.05, 2000.0, 0.5, 0.5, 
-                         70.0 * M_PI / 180.0, 95.0 * M_PI / 180.0, 0.05, 200.0, 1.0, 1.0);
+    // 2. Refinement: Map libMesh IDs to 0-based contiguous array indices.
+    // libMesh node IDs are NOT guaranteed to be 0,1,2,3 in parallel environments.
+    std::map<libMesh::dof_id_type, int> node_id_map;
+    int current_idx = 0;
+    
+    for (const auto& node : mesh.node_ptr_range()) {
+        node_id_map[node->id()] = current_idx++;
+        state.x.push_back(Vector3D((*node)(0), (*node)(1), (*node)(2)));
+        state.v.push_back(Vector3D(0, 0, 0));
+        state.a.push_back(Vector3D(0, 0, 0));
+    }
 
-    std::cout << "Step completed. Vertex 0 Z position: " << x[0].z << std::endl;
+    // 3. Extract Element (Face) data safely using the map
+    std::vector<std::set<int>> neighbor_sets(state.x.size());
+    
+    for (const auto& elem : mesh.element_ptr_range()) {
+        if (elem->type() == libMesh::TRI3) {
+            // Safely map libMesh node IDs to our contiguous vectors
+            int i0 = node_id_map[elem->node_id(0)];
+            int i1 = node_id_map[elem->node_id(1)];
+            int i2 = node_id_map[elem->node_id(2)];
 
-    return 0;
+            state.faces.push_back({i0, i1, i2});
+
+            // Build unique topological connections for laplacian calculations
+            neighbor_sets[i0].insert(i1); neighbor_sets[i0].insert(i2);
+            neighbor_sets[i1].insert(i0); neighbor_sets[i1].insert(i2);
+            neighbor_sets[i2].insert(i0); neighbor_sets[i2].insert(i1);
+        }
+    }
+
+    // 4. Flatten sets into optimized vector arrays for cache locality during simulation
+    state.neighbours.resize(state.x.size());
+    for (int i = 0; i < (int)state.x.size(); ++i) {
+        state.neighbours[i].assign(neighbor_sets[i].begin(), neighbor_sets[i].end());
+    }
+
+    return state;
 }
