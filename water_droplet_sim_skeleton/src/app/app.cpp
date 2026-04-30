@@ -243,51 +243,22 @@ void App::initializePlaneMesh() {
 }
 
 void App::buildDefaultScene() {
-    // Match Python reference: plane at y=0, normal up
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
 
-    // Gravity: [9.81, 0, -9.81] (tilted)
-    gravityLikeForce_ = Vec3(0.0, 0.0, 0.0);
     auto composite = std::make_shared<CompositeForceField>();
     composite->addField(std::make_shared<ConstantForceField>(gravityLikeForce_));
     dragField_ = std::make_shared<DragForceField>();
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    // Polyhedron mesh: nVertices=100, radius=0.3
-    auto tpl = DropletTemplate::CreatePolyhedron(100, 0.3);
+    auto tpl = DropletTemplate::CreateSphericalMesh(3, 0.20);
     DropletFactory factory(tpl);
 
-    // Material parameters (match Python)
-    MaterialParams mat;
-    mat.density = 0.1; // rho
-    mat.surfaceTension = 0.10; // gamma
-    mat.friction = 0.2; // friction_coeff
-    mat.viscousDamping = 0.50; // mu
-    mat.laplacianViscosity = 0.10; // eta
-    mat.advContactAngleDeg = 91.0; // advancing_angle
-    mat.recContactAngleDeg = 89.0; // receding_angle
-    mat.contactStiffness = 0.10; // alpha
-    mat.volumeStiffness = 1.0; // k_v
-
-    // Solver parameters (match Python)
-    solverParams_.dt = 0.0016;
-    solverParams_.substeps = 8;
-    solverParams_.enableExternalForce = true;
-    solverParams_.enableCollision = true;
-    solverParams_.enableViscosity = true;
-    solverParams_.enableCurvatureFlow = true;
-    solverParams_.enableContactAngle = true;
-    solverParams_.enableVolumeCorrect = true;
-    solverParams_.collisionPushoutEps = 1e-4;
-    solverParams_.adhesionDistance = 0.05;
-    solverParams_.maxVelocity = 15.0;
-
-    // Spawn at [0, 0, 0.4] (Python: x += [0,0,0.4])
     SpawnDesc desc;
-    desc.anchorWorld = Vec3(0.0, 0.4, 0.0);
+    desc.anchorWorld = Vec3(0.0, 0.0, 0.0);
     desc.initialVelocity = Vec3::Zero();
-    desc.material = mat;
+    desc.targetVolume = 0.01;
+    desc.material = defaultMaterial_;
     scene_.droplets().push_back(factory.spawn(1, desc, scene_.surface()));
 
     MergeSplitController mergeSplit(factory);

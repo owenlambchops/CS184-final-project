@@ -7,7 +7,7 @@ namespace wd {
 struct SpawnDesc {
     Vec3 anchorWorld = Vec3::Zero();
     Vec3 initialVelocity = Vec3::Zero();
-    double targetVolume = 0.0;
+    double targetVolume = 0.01;
     MaterialParams material;
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 #include <limits>
@@ -8,6 +9,9 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <map>
+#include <cmath>
+
 
 namespace wd {
 
@@ -16,6 +20,8 @@ using Vec3 = Eigen::Vector3d;
 using MatX3d = Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using MatX3i = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using SparseMat = Eigen::SparseMatrix<double>;
+using Weights = std::map<int, std::map<int, double>>;
+
 
 struct Ray {
     Vec3 origin = Vec3::Zero();
@@ -96,6 +102,19 @@ struct RenderStats {
     double renderMs = 0.0;
     int frameWidth = 0;
     int frameHeight = 0;
+};
+
+// Helper to extract geometry data from the Eigen matrices
+struct SimState {
+    Eigen::MatrixXd x; // Positions
+    Eigen::MatrixXd v; // Velocities
+    Eigen::MatrixXd a; // Accelerations
+    Eigen::MatrixXi faces;
+    std::vector<std::vector<int>> neighbours;
+    Weights w;
+    Eigen::MatrixXd normals;
+    double volume;
+    double rest_volume;
 };
 
 } // namespace wd

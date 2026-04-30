@@ -3,7 +3,15 @@
 
 namespace wd {
 
-SingleDropletSolver::SingleDropletSolver(SolverParams params) : params_(params) {}
+SingleDropletSolver::SingleDropletSolver(SolverParams params) 
+    : params_(params),
+      viscosity_(params.mu, params.eta, params.dampingGain),
+      curvature_(params.gamma),
+      contact_(params.boundaryAlpha, params.recedingAngle, params.advancingAngle),
+      external_(),
+      collision_(params.frictionCoeff),
+      volume_(params.kv) 
+{}
 
 void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IForceField& field, double timeSec) {
     // Python parity path: explicit Euler update order; Verlet remains intentionally unimplemented here.
@@ -24,10 +32,12 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
         }
 
         semiImplicitIntegrate(drop, dt);
+
         if (params_.enableCollision) {
             collision_.apply(
                 drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
         }
+        
         if (params_.enableVolumeCorrect) volume_.apply(drop, surface, dt);
     }
 

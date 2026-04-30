@@ -11,6 +11,7 @@ public:
     int id() const { return id_; }
 
     const MatX3i& faces() const { return tpl_->faces(); }
+    const std::vector<int>& boundaryLoop() const { return tpl_->boundaryLoop(); }
 
     const MatX3d& positions() const { return X_; }
     MatX3d& positions() { return X_; }
