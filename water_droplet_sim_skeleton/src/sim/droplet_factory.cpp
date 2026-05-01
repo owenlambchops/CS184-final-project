@@ -14,7 +14,15 @@ std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, co
 
     for (int i = 0; i < X.rows(); ++i) {
         Vec3 local = tpl_->restVertices().row(i).transpose();
-        Vec3 world = s.position + local.x() * s.tangentU + local.y() * s.normal + local.z() * s.tangentV;
+
+        // Lift droplet above surface along normal
+        const double lift = 0.5;
+        Vec3 world =
+            s.position
+            + local.x() * s.tangentU
+            + (local.y() + lift) * s.normal
+            + local.z() * s.tangentV;
+
         X.row(i) = world.transpose();
         U.row(i) = desc.initialVelocity.transpose();
     }
@@ -46,7 +54,7 @@ std::pair<std::unique_ptr<Droplet>, std::unique_ptr<Droplet>> DropletFactory::sp
     if (src.derived().principalAxis.norm() > 1e-8) {
         axis = src.derived().principalAxis.normalized();
     }
-    double offset = std::max(0.05, 0.35 * src.derived().footprintRadius);
+    double offset = std::max(0.05, src.derived().footprintRadius);
 
     SpawnDesc a;
     a.anchorWorld = src.derived().centerOfMass - offset * axis;

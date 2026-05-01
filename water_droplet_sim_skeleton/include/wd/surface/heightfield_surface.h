@@ -1,11 +1,12 @@
 #pragma once
 #include "wd/surface/isurface.h"
+#include "wd/core/types.h"
 
 namespace wd {
 
 class HeightFieldSurface final : public ISurface {
 public:
-    HeightFieldSurface(Eigen::MatrixXd heights, Vec3 origin, double dx, double dz, double heightScale);
+    HeightFieldSurface(DenseMat heights, Vec3 origin, double dx, double dz, double heightScale);
 
     SurfaceSample closestSample(const Vec3& worldPoint) const override;
     Vec3 projectPoint(const Vec3& worldPoint) const override;
@@ -17,7 +18,7 @@ private:
     double sampleHeight(double x, double z) const;
     Vec3 gradientNormal(double x, double z) const;
 
-    Eigen::MatrixXd heights_;
+    DenseMat heights_;
     Vec3 origin_;
     double dx_ = 1.0;
     double dz_ = 1.0;

@@ -20,8 +20,15 @@ using Vec3 = Eigen::Vector3d;
 using MatX3d = Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using MatX3i = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using SparseMat = Eigen::SparseMatrix<double>;
+using DenseMat = Eigen::MatrixXd;
 using Weights = std::map<int, std::map<int, double>>;
 
+// Stores adjacency data needed for the Loop Subdivision stencil
+struct Edge {
+    int v1 = -1, v2 = -1;
+    int opposite1 = -1, opposite2 = -1;
+    int new_vid = -1; // The index of the newly inserted vertex
+};
 
 struct Ray {
     Vec3 origin = Vec3::Zero();
@@ -51,17 +58,14 @@ struct PickHit {
 
 struct MaterialParams {
     double density = 1.0;
-
-    double surfaceTension = 1.0;
+    double surfaceTension = 100;           // gamma
     double friction = 0.15;
-    double viscousDamping = 0.10;
-    double laplacianViscosity = 0.02;
-
-    double advContactAngleDeg = 95.0;
-    double recContactAngleDeg = 70.0;
-    double contactStiffness = 0.5;
-
-    double volumeStiffness = 0.8;
+    double viscousDamping = 0.30;          // mu
+    double laplacianViscosity = 0.05;      // eta
+    double advContactAngleDeg = 90.0;      // theta_adv
+    double recContactAngleDeg = 90.0;      // theta_rec
+    double contactStiffness = 0.5;         // alpha
+    double volumeStiffness = 5000;          // k_v
 };
 
 struct SolverParams {
@@ -106,13 +110,13 @@ struct RenderStats {
 
 // Helper to extract geometry data from the Eigen matrices
 struct SimState {
-    Eigen::MatrixXd x; // Positions
-    Eigen::MatrixXd v; // Velocities
-    Eigen::MatrixXd a; // Accelerations
-    Eigen::MatrixXi faces;
+    MatX3d x; // Positions
+    MatX3d v; // Velocities
+    MatX3d a; // Accelerations
+    MatX3i faces;
     std::vector<std::vector<int>> neighbours;
     Weights w;
-    Eigen::MatrixXd normals;
+    MatX3d normals;
     double volume;
     double rest_volume;
 };

@@ -56,41 +56,46 @@ void Droplet::updateDerived() {
         derived_.avgVelocity = U_.colwise().mean().transpose();
     }
 
-    // 3. Shape Descriptors (based on the contact boundary loop)
-    const auto& boundary = tpl_->boundaryLoop();
-    if (boundary.size() >= 3) {
+    // 3. Shape Descriptors from all vertices (ground-plane footprint)
+    if (n >= 3) {
         Vec3 center = Vec3::Zero();
-        for (int idx : boundary) {
-            center += X_.row(idx).transpose();
+        for (int i = 0; i < n; ++i) {
+            center += X_.row(i).transpose();
         }
-        center /= static_cast<double>(boundary.size());
+        center /= static_cast<double>(n);
 
-        // Covariance matrix of boundary vertices
-        Eigen::Matrix3d C = Eigen::Matrix3d::Zero();
+        MatX3d C = MatX3d::Zero(3, 3);
         double maxR = 0.0;
-        for (int idx : boundary) {
-            Vec3 d = X_.row(idx).transpose() - center;
-            // Zero out Y component if you strictly want a 2D footprint analysis
-            // d.y() = 0; 
+        for (int i = 0; i < n; ++i) {
+            Vec3 d = X_.row(i).transpose() - center;
+            // Footprint is measured on the ground plane (x/y), so ignore vertical spread.
+            d.z() = 0.0;
             C += d * d.transpose();
             maxR = std::max(maxR, d.norm());
         }
-        C /= static_cast<double>(boundary.size());
-        
+        C /= static_cast<double>(n);
+
         derived_.footprintRadius = maxR;
 
-        // Eigendecomposition to find principal axes of the footprint
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> es(C);
+        // Principal footprint direction = largest-variance eigenvector in x/y.
+        Eigen::SelfAdjointEigenSolver<MatX3d> es(C);
         if (es.info() == Eigen::Success) {
-            auto vals = es.eigenvalues();
-            auto vecs = es.eigenvectors();
-            
-            // vals(2) is the largest variance, vals(0) is the smallest
+            const auto vals = es.eigenvalues();
+            Vec3 axis = es.eigenvectors().col(2).normalized();
+            axis.z() = 0.0;
+            if (axis.norm() > 1e-12) {
+                axis.normalize();
+            } else {
+                axis = Vec3::UnitX();
+            }
+
             double largest = std::max(vals(2), 1e-12);
-            double smallest = std::max(vals(0), 1e-12);
-            
+            double smallest = std::max(vals(1), 1e-12);
             derived_.elongationRatio = std::sqrt(largest / smallest);
-            derived_.principalAxis = vecs.col(2).normalized();
+            derived_.principalAxis = axis;
+        } else {
+            derived_.elongationRatio = 1.0;
+            derived_.principalAxis = Vec3::UnitX();
         }
     } else {
         // Fallbacks for point/line topologies

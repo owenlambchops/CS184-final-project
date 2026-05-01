@@ -164,9 +164,14 @@ Defines `DropletDerivedData`, which stores quantities derived from current dropl
 - Center of mass
 - Average velocity
 - Current volume estimate
+
+<!-- - Vertex normals
+- Center of mass
+- Average velocity
+- Current volume estimate
 - Footprint radius
 - Elongation ratio
-- Principal axis
+- Principal axis -->
 
 ## `include/wd/sim/droplet.h`
 

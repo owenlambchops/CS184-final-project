@@ -249,72 +249,72 @@ std::pair<std::vector<Vec3>, std::vector<Vec3>> compute_accelerations(
     return {a_total, delta_v};
 }
 
-// Equivalent to update_forward_euler()
-void update_forward_euler(
-        std::vector<Vec3>& a,
-        std::vector<Vec3>& v,
-        std::vector<Vec3>& x,
-        const std::vector<Face>& faces,
-        const std::vector<std::vector<int>>& neighbours,
-        double V_0,
-        double dt,
-        Vec3 g,
-        double gamma,
-        double mu,
-        double eta,
-        double k_v,
-        double friction_coeff,
-        double boundary_alpha,
-        double receding_angle,
-        double advancing_angle,
-        double adhesion_dist,
-        double max_internal_accel,
-        double density,
-        double damping_gain)
-{
-    auto [a_total, delta_v] = compute_accelerations(x,
-    v, faces, neighbours, V_0, g, gamma, k_v, boundary_alpha, receding_angle, 
-    advancing_angle, adhesion_dist, max_internal_accel, density);
+// // Equivalent to update_forward_euler()
+// void update_forward_euler(
+//         std::vector<Vec3>& a,
+//         std::vector<Vec3>& v,
+//         std::vector<Vec3>& x,
+//         const std::vector<Face>& faces,
+//         const std::vector<std::vector<int>>& neighbours,
+//         double V_0,
+//         double dt,
+//         Vec3 g,
+//         double gamma,
+//         double mu,
+//         double eta,
+//         double k_v,
+//         double friction_coeff,
+//         double boundary_alpha,
+//         double receding_angle,
+//         double advancing_angle,
+//         double adhesion_dist,
+//         double max_internal_accel,
+//         double density,
+//         double damping_gain)
+// {
+//     auto [a_total, delta_v] = compute_accelerations(x,
+//     v, faces, neighbours, V_0, g, gamma, k_v, boundary_alpha, receding_angle, 
+//     advancing_angle, adhesion_dist, max_internal_accel, density);
 
-    double mean_speed = 0;
-    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-        // Base damping
-        Vec3 v_damped = v[i] * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
+//     double mean_speed = 0;
+//     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+//         // Base damping
+//         Vec3 v_damped = v[i] * (1.0 - mu * dt) + delta_v[i] * (eta * dt);
 
-        // Energy-aware damping
-        double speed = v[i].norm();
-        double lin = std::max(0.0, mu) * damping_gain;
-        double quad = (0.2 + 0.3 * std::max(0.0, eta)) * damping_gain;
-        double damping = 1.0 / (1.0 + lin * dt + quad * speed * dt);
+//         // Energy-aware damping
+//         double speed = v[i].norm();
+//         double lin = std::max(0.0, mu) * damping_gain;
+//         double quad = (0.2 + 0.3 * std::max(0.0, eta)) * damping_gain;
+//         double damping = 1.0 / (1.0 + lin * dt + quad * speed * dt);
 
-        v_damped *= damping;
-        mean_speed += speed;
+//         v_damped *= damping;
+//         mean_speed += speed;
 
-        // Integration
-        v[i] = v_damped + a_total[i] * dt;
+//         // Integration
+//         v[i] = v_damped + a_total[i] * dt;
 
-        // Clip
-        auto clip = [](double val, double limit) {
-            return std::max(-limit, std::min(limit, val));
-        };
-        v[i].x = clip(v[i].x, 15.0);
-        v[i].y = clip(v[i].y, 15.0);
-        v[i].z = clip(v[i].z, 15.0);
+//         // Clip
+//         auto clip = [](double val, double limit) {
+//             return std::max(-limit, std::min(limit, val));
+//         };
+//         v[i].x = clip(v[i].x, 15.0);
+//         v[i].y = clip(v[i].y, 15.0);
+//         v[i].z = clip(v[i].z, 15.0);
 
-        x[i] += v[i] * dt;
-        a[i] = a_total[i];
-    }
+//         x[i] += v[i] * dt;
+//         a[i] = a_total[i];
+//     }
 
-    mean_speed /= x.size();
-    if (mean_speed < 0.25) {
-        double factor = std::max(0.0, 1.0 - 0.3 * dt * damping_gain);
-        for (auto& vel : v) {
-            vel *= factor;
-        }
-    }
+//     mean_speed /= x.size();
+//     if (mean_speed < 0.25) {
+//         double factor = std::max(0.0, 1.0 - 0.3 * dt * damping_gain);
+//         for (auto& vel : v) {
+//             vel *= factor;
+//         }
+//     }
 
-    apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist);
-}
+//     apply_surface_interactions(x, v, dt, friction_coeff, adhesion_dist);
+// }
 
 // Logic matches Python's update_velocity_verlet()
 void update_velocity_verlet(
@@ -383,58 +383,58 @@ void update_velocity_verlet(
 }
 
 
-/**
- * Safely generates a libMesh sphere and extracts it into contiguous arrays
- * suited for real-time physics iteration.
- */
-SimState generate_physics_mesh(libMesh::Mesh& mesh, double radius, int segments)
-{
-    SimState state;
-    state.V_0 = 4.0 / 3.0 * M_PI * std::pow(radius, 3);
+// /**
+//  * Safely generates a libMesh sphere and extracts it into contiguous arrays
+//  * suited for real-time physics iteration.
+//  */
+// SimState generate_physics_mesh(libMesh::Mesh& mesh, double radius, int segments)
+// {
+//     SimState state;
+//     state.V_0 = 4.0 / 3.0 * M_PI * std::pow(radius, 3);
 
-    // 1. Ask libMesh to build the geometry using 3-node triangles
-    libMesh::MeshTools::Generation::build_sphere(mesh, radius, segments, libMesh::TRI3);
-    mesh.prepare_for_use(); // Crucial: Finalizes element connectivity and nodal assignments
+//     // 1. Ask libMesh to build the geometry using 3-node triangles
+//     libMesh::MeshTools::Generation::build_sphere(mesh, radius, segments, libMesh::TRI3);
+//     mesh.prepare_for_use(); // Crucial: Finalizes element connectivity and nodal assignments
 
-    // 2. Refinement: Map libMesh IDs to 0-based contiguous array indices.
-    // libMesh node IDs are NOT guaranteed to be 0,1,2,3 in parallel environments.
-    std::map<libMesh::dof_id_type, int> node_id_map;
-    int current_idx = 0;
+//     // 2. Refinement: Map libMesh IDs to 0-based contiguous array indices.
+//     // libMesh node IDs are NOT guaranteed to be 0,1,2,3 in parallel environments.
+//     std::map<libMesh::dof_id_type, int> node_id_map;
+//     int current_idx = 0;
 
-    for (const auto& node : mesh.node_ptr_range()) {
-        node_id_map[node->id()] = current_idx++;
-        state.x.push_back(Vec3((*node)(0), (*node)(1), (*node)(2)));
-        state.v.push_back(Vec3(0, 0, 0));
-        state.a.push_back(Vec3(0, 0, 0));
-    }
+//     for (const auto& node : mesh.node_ptr_range()) {
+//         node_id_map[node->id()] = current_idx++;
+//         state.x.push_back(Vec3((*node)(0), (*node)(1), (*node)(2)));
+//         state.v.push_back(Vec3(0, 0, 0));
+//         state.a.push_back(Vec3(0, 0, 0));
+//     }
 
-    // 3. Extract Element (Face) data safely using the map
-    std::vector<std::set<int>> neighbor_sets(state.x.size());
+//     // 3. Extract Element (Face) data safely using the map
+//     std::vector<std::set<int>> neighbor_sets(state.x.size());
 
-    for (const auto& elem : mesh.element_ptr_range()) {
-        if (elem->type() == libMesh::TRI3) {
-            // Safely map libMesh node IDs to our contiguous vectors
-            int i0 = node_id_map[elem->node_id(0)];
-            int i1 = node_id_map[elem->node_id(1)];
-            int i2 = node_id_map[elem->node_id(2)];
+//     for (const auto& elem : mesh.element_ptr_range()) {
+//         if (elem->type() == libMesh::TRI3) {
+//             // Safely map libMesh node IDs to our contiguous vectors
+//             int i0 = node_id_map[elem->node_id(0)];
+//             int i1 = node_id_map[elem->node_id(1)];
+//             int i2 = node_id_map[elem->node_id(2)];
 
-            state.faces.push_back({i0, i1, i2});
+//             state.faces.push_back({i0, i1, i2});
 
-            // Build unique topological connections for laplacian calculations
-            neighbor_sets[i0].insert(i1);
-            neighbor_sets[i0].insert(i2);
-            neighbor_sets[i1].insert(i0);
-            neighbor_sets[i1].insert(i2);
-            neighbor_sets[i2].insert(i0);
-            neighbor_sets[i2].insert(i1);
-        }
-    }
+//             // Build unique topological connections for laplacian calculations
+//             neighbor_sets[i0].insert(i1);
+//             neighbor_sets[i0].insert(i2);
+//             neighbor_sets[i1].insert(i0);
+//             neighbor_sets[i1].insert(i2);
+//             neighbor_sets[i2].insert(i0);
+//             neighbor_sets[i2].insert(i1);
+//         }
+//     }
 
-    // 4. Flatten sets into optimized vector arrays for cache locality during simulation
-    state.neighbours.resize(state.x.size());
-    for (int i = 0; i < static_cast<int>(state.x.size()); ++i) {
-        state.neighbours[i].assign(neighbor_sets[i].begin(), neighbor_sets[i].end());
-    }
+//     // 4. Flatten sets into optimized vector arrays for cache locality during simulation
+//     state.neighbours.resize(state.x.size());
+//     for (int i = 0; i < static_cast<int>(state.x.size()); ++i) {
+//         state.neighbours[i].assign(neighbor_sets[i].begin(), neighbor_sets[i].end());
+//     }
 
-    return state;
-}
+//     return state;
+// }
