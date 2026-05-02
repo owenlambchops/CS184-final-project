@@ -78,8 +78,9 @@ struct SolverParams {
     bool enableCollision = true;
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
-    bool enableContactAngle = false;
+    bool enableContactAngle = true;
     bool enableVolumeCorrect = true;
+    bool enableVertexRepulsion = true;
     int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;
@@ -87,6 +88,9 @@ struct SolverParams {
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
     double vertexDamping = 0.0;
+    double vertexRepulsionStrength = 100.0;        // acceleration scale
+    double vertexRepulsionTargetRatio = 0.8;      // trigger below ratio * mean edge length
+    double vertexRepulsionMaxAccel = 120.0;       // per-vertex cap
 
 };
 

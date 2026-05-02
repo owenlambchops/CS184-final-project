@@ -66,6 +66,14 @@ MatX3d SingleDropletSolver::computeAcceleration(
 
     if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
     if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
+    if (params_.enableVertexRepulsion) {
+        repulsion_.apply(
+                internalDrop,
+                1.0,
+                params_.vertexRepulsionTargetRatio,
+                params_.vertexRepulsionStrength,
+                params_.vertexRepulsionMaxAccel);
+    }
 
     MatX3d aInternal = internalDrop.velocities();
     const double maxA = std::max(params_.maxInternalAccel, 0.0);

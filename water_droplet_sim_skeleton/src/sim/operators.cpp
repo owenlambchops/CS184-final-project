@@ -321,6 +321,64 @@ void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double d
     }
 }
 
+void VertexRepulsionOperator::apply(
+        Droplet& drop,
+        double dt,
+        double targetRatio,
+        double strength,
+        double maxAccel) const {
+    if (dt <= 0.0) return;
+    if (strength <= 0.0) return;
+
+    const auto& E = drop.edges();
+    const auto& X = drop.positions();
+    const auto& N = drop.derived().vertexNormals;
+    auto& U = drop.velocities();
+    const int n = X.rows();
+    if (n == 0 || E.empty()) return;
+
+    const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
+    const double targetLen = std::max(1e-8, targetRatio * meanEdge);
+    const double density = std::max(drop.material().density, 1e-8);
+    const double accelCap = std::max(0.0, maxAccel);
+
+    MatX3d aRep = MatX3d::Zero(n, 3);
+    for (const auto& e : E) {
+        const int i = e.x();
+        const int j = e.y();
+        if (i < 0 || j < 0 || i >= n || j >= n) continue;
+
+        const Vec3 xi = X.row(i).transpose();
+        const Vec3 xj = X.row(j).transpose();
+        const Vec3 d = xj - xi;
+        const double len = d.norm();
+        if (len <= 1e-12) continue;
+
+        const Vec3 dir = d / len;
+        const double rel = (len - targetLen) / targetLen;
+        const double mag = strength * rel * std::abs(rel);
+        if (std::abs(mag) <= 1e-12) continue;
+
+        // Short edge (rel < 0): pushes vertices apart.
+        // Long edge  (rel > 0): pulls vertices together.
+        aRep.row(i) += ( mag * dir / density).transpose();
+        aRep.row(j) += (-mag * dir / density).transpose();
+    }
+
+    for (int i = 0; i < n; ++i) {
+        Vec3 ai = aRep.row(i).transpose();
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn > 1e-12) {
+            ni /= nn;
+            ai -= ai.dot(ni) * ni; // tangent projection to reduce shape-volume side effects
+        }
+        const double an = ai.norm();
+        if (accelCap > 0.0 && an > accelCap) ai *= accelCap / std::max(an, 1e-8);
+        U.row(i) += (ai * dt).transpose();
+    }
+}
+
 double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&) const {
     return computeClosedVolumeLocal(drop);
 }
