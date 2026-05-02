@@ -1,5 +1,6 @@
 #include "wd/sim/single_droplet_solver.h"
 #include <algorithm>
+#include <cmath>
 
 namespace wd {
 
@@ -38,16 +39,10 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
                 drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
         }
         
-        if (params_.enableVolumeCorrect) volume_.apply(drop, surface, dt);
+        // Volume correction is already included in computeAcceleration().
     }
 
-    VolumeCorrector vc;
-    drop.derived().currentVolume = vc.computeClosedVolume(drop, surface);
     drop.updateDerived();
-}
-
-void SingleDropletSolver::semiImplicitIntegrate(Droplet& drop, double dt) const {
-    drop.positions() += dt * drop.velocities();
 }
 
 MatX3d SingleDropletSolver::computeAcceleration(
@@ -55,15 +50,46 @@ MatX3d SingleDropletSolver::computeAcceleration(
         const ISurface& surface,
         const IForceField& field,
         double timeSec) const {
-    Droplet tmp = drop;
-    tmp.velocities() = MatX3d::Zero(tmp.positions().rows(), 3);
+    Droplet internalDrop = drop;
+    internalDrop.velocities() = MatX3d::Zero(internalDrop.positions().rows(), 3);
 
-    if (params_.enableCurvatureFlow) curvature_.apply(tmp, surface, 1.0);
-    if (params_.enableContactAngle) contact_.apply(tmp, surface, 1.0, params_.adhesionDistance);
-    if (params_.enableExternalForce) external_.apply(tmp, surface, field, timeSec, 1.0);
-    if (params_.enableVolumeCorrect) volume_.apply(tmp, surface, 1.0);
+    if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
+    if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
+    if (params_.enableVolumeCorrect) volume_.apply(internalDrop, surface, 1.0);
 
-    return tmp.velocities();
+    MatX3d aInternal = internalDrop.velocities();
+    const double maxA = std::max(params_.maxInternalAccel, 0.0);
+    if (maxA > 0.0) {
+        for (int i = 0; i < aInternal.rows(); ++i) {
+            Vec3 ai = aInternal.row(i).transpose();
+            const double n = ai.norm();
+            if (!std::isfinite(n)) {
+                aInternal.row(i).setZero();
+                continue;
+            }
+            if (n > maxA) {
+                ai *= (maxA / std::max(n, 1e-8));
+                aInternal.row(i) = ai.transpose();
+            }
+        }
+    }
+
+    MatX3d aExternal = MatX3d::Zero(drop.positions().rows(), 3);
+    if (params_.enableExternalForce) {
+        Droplet externalDrop = drop;
+        externalDrop.velocities() = MatX3d::Zero(externalDrop.positions().rows(), 3);
+        external_.apply(externalDrop, surface, field, timeSec, 1.0);
+        aExternal = externalDrop.velocities();
+    }
+
+    MatX3d aTotal = aInternal + aExternal;
+    for (int i = 0; i < aTotal.rows(); ++i) {
+        const Vec3 ai = aTotal.row(i).transpose();
+        if (!std::isfinite(ai.x()) || !std::isfinite(ai.y()) || !std::isfinite(ai.z())) {
+            aTotal.row(i).setZero();
+        }
+    }
+    return aTotal;
 }
 
 } // namespace wd

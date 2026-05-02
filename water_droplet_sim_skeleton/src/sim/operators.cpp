@@ -30,26 +30,42 @@ std::vector<std::vector<int>> buildNeighbours(const MatX3i& faces, int n) {
 
 Weights computeCotangentWeights(const MatX3d& x, const MatX3i& faces) {
     Weights w;
-
-    auto cotangent = [](const Vec3& a, const Vec3& b) {
-        const Vec3 cross = a.cross(b);
-        const double denom = std::max(cross.norm(), 1e-5);
-        return a.dot(b) / denom;
-    };
+    const double eps = 1e-5;
 
     for (int fi = 0; fi < faces.rows(); ++fi) {
         const int i0 = faces(fi, 0);
         const int i1 = faces(fi, 1);
         const int i2 = faces(fi, 2);
+        const Vec3 p0 = x.row(i0).transpose();
+        const Vec3 p1 = x.row(i1).transpose();
+        const Vec3 p2 = x.row(i2).transpose();
 
-        const Vec3 x0 = x.row(i0).transpose();
-        const Vec3 x1 = x.row(i1).transpose();
-        const Vec3 x2 = x.row(i2).transpose();
+        // Edge vectors from each vertex
+        Vec3 e0_1 = p1 - p0,  e0_2 = p2 - p0;   // edges at vertex 0
+        Vec3 e1_2 = p2 - p1,  e1_0 = p0 - p1;   // edges at vertex 1
+        Vec3 e2_0 = p0 - p2,  e2_1 = p1 - p2;   // edges at vertex 2
 
-        const double cot0 = cotangent(x1 - x0, x2 - x0);
-        const double cot1 = cotangent(x2 - x1, x0 - x1);
-        const double cot2 = cotangent(x0 - x2, x1 - x2);
+        // Cross products (their norms equal twice the sub-triangle area)
+        const Vec3 cr0 = e0_1.cross(e0_2);
+        const Vec3 cr1 = e1_2.cross(e1_0);
+        const Vec3 cr2 = e2_0.cross(e2_1);
 
+        double n0 = cr0.norm();
+        double n1 = cr1.norm();
+        double n2 = cr2.norm();
+
+        // Guard against degenerate (zero-area) faces — mirrors np.where(norm==0, 1e-5, norm)
+        if (n0 == 0.0) n0 = eps;
+        if (n1 == 0.0) n1 = eps;
+        if (n2 == 0.0) n2 = eps;
+
+        // cot(angle) = dot(edges) / |cross(edges)|
+        const double cot0 = e0_1.dot(e0_2) / n0;
+        const double cot1 = e1_2.dot(e1_0) / n1;
+        const double cot2 = e2_0.dot(e2_1) / n2;
+
+        // Assign weights; clamp negatives to 0 (matches Python's max(0.0, ...))
+        // w0 is the weight on edge (i0,i1), opposite to vertex i2 → uses cot2
         const double w0 = std::max(0.0, cot2 * 0.5);
         const double w1 = std::max(0.0, cot0 * 0.5);
         const double w2 = std::max(0.0, cot1 * 0.5);
@@ -268,6 +284,7 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) c
     const double current = computeClosedVolume(drop, surface);
     const double density = std::max(drop.material().density, 1e-8);
     const double kv = std::max(0.0, drop.material().volumeStiffness);
+    // Python parity: f_vol = k_v * (V0 - V) * n, then a = f_vol / density.
     const double coeff = kv * (target - current) / density;
 
     for (int i = 0; i < U.rows(); ++i) {

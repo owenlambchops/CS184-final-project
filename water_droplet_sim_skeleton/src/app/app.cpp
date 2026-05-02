@@ -257,7 +257,7 @@ void App::buildDefaultScene() {
     SpawnDesc desc;
     desc.anchorWorld = Vec3(0.0, 0.0, 0.0);
     desc.initialVelocity = Vec3::Zero();
-    desc.targetVolume = 0.01;
+    desc.targetVolume = 0.0; // Use spawn-time fallback to initial droplet volume.
     desc.material = defaultMaterial_;
     scene_.droplets().push_back(factory.spawn(1, desc, scene_.surface()));
 

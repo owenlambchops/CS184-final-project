@@ -57,15 +57,16 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double density = 1.0;
-    double surfaceTension = 100;           // gamma
-    double friction = 0.15;
-    double viscousDamping = 0.30;          // mu
-    double laplacianViscosity = 0.05;      // eta
-    double advContactAngleDeg = 90.0;      // theta_adv
-    double recContactAngleDeg = 90.0;      // theta_rec
-    double contactStiffness = 0.5;         // alpha
-    double volumeStiffness = 5000;          // k_v
+    double surfaceTension = 5000.0;           // gamma
+    double viscousDamping = 16.0;          // mu
+    double laplacianViscosity = 8.0;      // eta
+    double volumeStiffness = 2000.0;          // k_v
+    double density = 0.10;
+    double contactStiffness = 3.0;         // alpha
+    double friction = 0.2;
+    // damping_gain=1.6, # Apply new robust damping
+    double advContactAngleDeg = 89.0;      // theta_adv
+    double recContactAngleDeg = 91.0;      // theta_rec    
 };
 
 struct SolverParams {
@@ -77,11 +78,13 @@ struct SolverParams {
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
     bool enableContactAngle = true;
-    bool enableVolumeCorrect = false;
+    bool enableVolumeCorrect = true;
 
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.05;
     double maxVelocity = 15.0;
+    double maxInternalAccel = 200.0;
+    double vertexDamping = 0.0;
 };
 
 struct RenderParams {

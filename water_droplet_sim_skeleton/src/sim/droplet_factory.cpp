@@ -15,7 +15,7 @@ std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, co
     for (int i = 0; i < X.rows(); ++i) {
         Vec3 local = tpl_->restVertices().row(i).transpose();
 
-        // Lift droplet above surface along normal
+        // Small lift to avoid immediate penetration without creating a large impact.
         const double lift = 0.5;
         Vec3 world =
             s.position
@@ -27,8 +27,9 @@ std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, co
         U.row(i) = desc.initialVelocity.transpose();
     }
 
-    drop->setTargetVolume(desc.targetVolume);
     drop->updateDerived();
+    const double targetVolume = (desc.targetVolume > 0.0) ? desc.targetVolume : drop->derived().currentVolume;
+    drop->setTargetVolume(targetVolume);
     return drop;
 }
 

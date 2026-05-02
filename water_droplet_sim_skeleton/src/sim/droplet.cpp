@@ -22,11 +22,14 @@ Droplet::Droplet(int id, std::shared_ptr<const DropletTemplate> tpl, const Mater
 void Droplet::updateDerived() {
     int n = static_cast<int>(X_.rows());
     
-    // 1. Update Vertex Normals (Area-weighted)
-    derived_.vertexNormals = MatX3d::Zero(n, 3);
-    const auto& F = tpl_->faces(); // Fetch topology from template
+    // 1. Update Vertex Normals (area-weighted) and enclosed volume.
+    const Vec3 com = X_.colwise().mean().transpose();
+    double volumeSigned = 0.0;
 
-    for (int i = 0; i < F.rows(); ++i) {
+    derived_.vertexNormals = MatX3d::Zero(n, 3);
+    const auto& F = tpl_->faces();
+
+    for (int i = 0; i < F.rows(); ++i) { 
         int a = F(i, 0), b = F(i, 1), c = F(i, 2);
         Vec3 va = X_.row(a).transpose();
         Vec3 vb = X_.row(b).transpose();
@@ -34,13 +37,20 @@ void Droplet::updateDerived() {
         
         // Area-weighted normal of the face
         Vec3 fn = (vb - va).cross(vc - va);
-        if (fn.norm() > 1e-12) fn.normalize();
+        // Keep face orientation consistent with outward direction from COM.
+        if (fn.dot(va - com) < 0.0) {
+            fn = -fn;
+        }
+
+        // Volume contribution from this face relative to COM.
+        volumeSigned += (va - com).dot((vb - com).cross(vc - com)) / 6.0;
 
         // Accumulate to vertices
         derived_.vertexNormals.row(a) += fn.transpose();
         derived_.vertexNormals.row(b) += fn.transpose();
         derived_.vertexNormals.row(c) += fn.transpose();
     }
+    derived_.currentVolume = std::abs(volumeSigned);
 
     // Normalize accumulated vertex normals
     for (int i = 0; i < n; ++i) {
