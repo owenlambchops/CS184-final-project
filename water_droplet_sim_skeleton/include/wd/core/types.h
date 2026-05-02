@@ -58,10 +58,10 @@ struct PickHit {
 
 struct MaterialParams {
     double surfaceTension = 5000.0;           // gamma
-    double viscousDamping = 16.0;          // mu
-    double laplacianViscosity = 8.0;      // eta
+    double viscousDamping = 8.0;          // mu
+    double laplacianViscosity = 16.0;      // eta
     double volumeStiffness = 2000.0;          // k_v
-    double density = 0.10;
+    double density = 1.0;
     double contactStiffness = 3.0;         // alpha
     double friction = 0.2;
     // damping_gain=1.6, # Apply new robust damping
