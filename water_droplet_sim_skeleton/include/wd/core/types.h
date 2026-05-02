@@ -130,6 +130,7 @@ enum class RenderDebugView : int {
     DropletDepth = 4,
     DropletNormal = 5,
     Thickness = 6,
+    Caustics = 7,
 };
 
 struct RenderParams {

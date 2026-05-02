@@ -956,6 +956,7 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setInt("uSceneDepth", 3);
         compositeShader_.setInt("uDropletDepth", 4);
         compositeShader_.setInt("uDropletBackDepth", 5);
+        compositeShader_.setInt("uCausticMap", 6);
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
         compositeShader_.setInt("uDebugView", static_cast<int>(params.debugView));
         compositeShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
@@ -984,11 +985,15 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         glBindTexture(GL_TEXTURE_2D, dropletDepthTex_);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, dropletBackDepthTex_);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, causticTex_);
 
         glBindVertexArray(fullscreenVao_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE4);

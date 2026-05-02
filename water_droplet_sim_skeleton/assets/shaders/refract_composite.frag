@@ -8,6 +8,7 @@ uniform sampler2D uEnvironmentMap;
 uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
 uniform sampler2D uDropletBackDepth;
+uniform sampler2D uCausticMap;
 uniform mat4 uInvProj;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
@@ -32,6 +33,7 @@ const int kDebugSceneDepth = 3;
 const int kDebugDropletDepth = 4;
 const int kDebugDropletNormal = 5;
 const int kDebugThickness = 6;
+const int kDebugCaustics = 7;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
@@ -110,6 +112,12 @@ void main() {
     if (uDebugView == kDebugThickness) {
         float thickness = estimateThickness();
         FragColor = vec4(vec3(thickness), 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugCaustics) {
+        float caustic = texture(uCausticMap, vUv).r;
+        FragColor = vec4(vec3(caustic), 1.0);
         return;
     }
 
