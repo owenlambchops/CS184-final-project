@@ -5,7 +5,7 @@ namespace wd {
 
 class PlaneSurface final : public ISurface {
 public:
-    PlaneSurface(const Vec3& origin, const Vec3& normal);
+    PlaneSurface(const Vec3& origin, const Vec3& normal, double sideLength = 6.0);
 
     SurfaceSample closestSample(const Vec3& worldPoint) const override;
     Vec3 projectPoint(const Vec3& worldPoint) const override;
@@ -23,14 +23,19 @@ public:
     const Vec3& normal() const { return normal_; }
     const Vec3& tangentU() const { return tangentU_; }
     const Vec3& tangentV() const { return tangentV_; }
+    double sideLength() const { return sideLength_; }
+    void setSideLength(double sideLength);
 
 private:
-    static constexpr double kRenderHalfExtent = 3.0;
+    bool containsProjection(const Vec3& projectedPoint) const;
+
+    static constexpr double kMinSideLength = 0.1;
 
     Vec3 origin_;
     Vec3 normal_;
     Vec3 tangentU_;
     Vec3 tangentV_;
+    double sideLength_ = 6.0;
     SurfaceMaterialParams material_;
     SurfaceRenderParams renderParams_;
 };

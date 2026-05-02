@@ -1,4 +1,6 @@
 #include "wd/surface/plane_surface.h"
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace wd {
@@ -7,23 +9,27 @@ Vec3 safeNormalize(const Vec3& v, const Vec3& fallback) {
     double n = v.norm();
     return n > 1e-12 ? v / n : fallback;
 }
+
+constexpr double kOutsideSignedDistance = 1e6;
 } // namespace
 
-PlaneSurface::PlaneSurface(const Vec3& origin, const Vec3& normal)
+PlaneSurface::PlaneSurface(const Vec3& origin, const Vec3& normal, double sideLength)
     : origin_(origin), normal_(safeNormalize(normal, Vec3::UnitY())) {
     Vec3 seed = std::abs(normal_.dot(Vec3::UnitY())) < 0.9 ? Vec3::UnitY() : Vec3::UnitX();
     tangentU_ = safeNormalize(seed.cross(normal_), Vec3::UnitX());
     tangentV_ = safeNormalize(normal_.cross(tangentU_), Vec3::UnitZ());
+    setSideLength(sideLength);
 }
 
 SurfaceSample PlaneSurface::closestSample(const Vec3& worldPoint) const {
     SurfaceSample s;
     double d = (worldPoint - origin_).dot(normal_);
-    s.position = worldPoint - d * normal_;
+    Vec3 projected = worldPoint - d * normal_;
+    s.position = projected;
     s.normal = normal_;
     s.tangentU = tangentU_;
     s.tangentV = tangentV_;
-    s.signedDistance = d;
+    s.signedDistance = containsProjection(projected) ? d : kOutsideSignedDistance;
     return s;
 }
 
@@ -39,17 +45,32 @@ bool PlaneSurface::raycast(const Ray& ray, PickHit& outHit) const {
     double t = (origin_ - ray.origin).dot(normal_) / denom;
     if (t < 0.0) return false;
 
+    Vec3 hitPosition = ray.origin + t * ray.dir;
+    if (!containsProjection(hitPosition)) return false;
+
     outHit.hit = true;
     outHit.t = t;
-    outHit.position = ray.origin + t * ray.dir;
+    outHit.position = hitPosition;
     outHit.normal = normal_;
     return true;
 }
 
 AABB PlaneSurface::bounds() const {
     AABB b;
-    b.min = Vec3(-10.0, -10.0, -10.0);
-    b.max = Vec3( 10.0,  10.0,  10.0);
+    const double half = 0.5 * sideLength_;
+    const Vec3 u = half * tangentU_;
+    const Vec3 v = half * tangentV_;
+    const std::array<Vec3, 4> corners = {
+        origin_ - u - v,
+        origin_ + u - v,
+        origin_ + u + v,
+        origin_ - u + v,
+    };
+
+    for (const Vec3& corner : corners) {
+        b.min = b.min.cwiseMin(corner);
+        b.max = b.max.cwiseMax(corner);
+    }
     return b;
 }
 
@@ -59,8 +80,9 @@ SurfaceRenderMesh PlaneSurface::buildRenderMesh() const {
     mesh.normals.resize(4, 3);
     mesh.faces.resize(2, 3);
 
-    const Vec3 u = kRenderHalfExtent * tangentU_;
-    const Vec3 v = kRenderHalfExtent * tangentV_;
+    const double half = 0.5 * sideLength_;
+    const Vec3 u = half * tangentU_;
+    const Vec3 v = half * tangentV_;
     mesh.positions.row(0) = (origin_ - u - v).transpose();
     mesh.positions.row(1) = (origin_ + u - v).transpose();
     mesh.positions.row(2) = (origin_ + u + v).transpose();
@@ -73,6 +95,18 @@ SurfaceRenderMesh PlaneSurface::buildRenderMesh() const {
     mesh.faces << 0, 1, 2,
                   0, 2, 3;
     return mesh;
+}
+
+void PlaneSurface::setSideLength(double sideLength) {
+    sideLength_ = std::max(kMinSideLength, sideLength);
+}
+
+bool PlaneSurface::containsProjection(const Vec3& projectedPoint) const {
+    const Vec3 local = projectedPoint - origin_;
+    const double half = 0.5 * sideLength_;
+    constexpr double eps = 1e-8;
+    return std::abs(local.dot(tangentU_)) <= half + eps &&
+           std::abs(local.dot(tangentV_)) <= half + eps;
 }
 
 } // namespace wd

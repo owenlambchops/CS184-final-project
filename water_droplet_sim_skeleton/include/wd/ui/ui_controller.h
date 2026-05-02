@@ -10,6 +10,8 @@ struct UiActions {
     bool applyGravity = false;
     Vec3 gravityForce = Vec3::Zero();
     bool saveScreenshot = false;
+    bool setPlaneSideLength = false;
+    double planeSideLength = 0.0;
 };
 
 class UiController {
@@ -19,6 +21,7 @@ public:
                    MaterialParams& defaultMaterial,
                    SurfaceMaterialParams& surfaceMaterial,
                    SurfaceRenderParams& surfaceRender,
+                   double planeSideLength,
                    const Vec3& gravityLikeForce,
                    MergeSplitController& mergeSplit);
 

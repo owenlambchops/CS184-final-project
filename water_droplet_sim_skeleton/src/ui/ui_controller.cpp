@@ -24,6 +24,7 @@ UiActions UiController::draw(SolverParams&,
                              MaterialParams&,
                              SurfaceMaterialParams& surfaceMaterial,
                              SurfaceRenderParams& surfaceRender,
+                             double planeSideLength,
                              const Vec3& gravityLikeForce,
                              MergeSplitController&) {
     UiActions actions;
@@ -63,6 +64,14 @@ UiActions UiController::draw(SolverParams&,
 
     ImGui::Separator();
     ImGui::TextUnformatted("Glass Surface");
+    if (planeSideLength > 0.0) {
+        double editedSideLength = planeSideLength;
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::DragScalar("Plane Side Length", ImGuiDataType_Double, &editedSideLength, 0.05f, nullptr, nullptr, "%.3f")) {
+            actions.setPlaneSideLength = true;
+            actions.planeSideLength = std::max(editedSideLength, 0.1);
+        }
+    }
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Glass IOR", ImGuiDataType_Double, &surfaceRender.ior, 0.01f, nullptr, nullptr, "%.3f");
     ImGui::SetNextItemWidth(vectorInputWidth);

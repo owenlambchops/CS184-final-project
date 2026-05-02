@@ -349,14 +349,20 @@ void App::render() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        auto* planeSurface = dynamic_cast<PlaneSurface*>(&scene_.surface());
+        const double planeSideLength = planeSurface ? planeSurface->sideLength() : 0.0;
         UiActions actions = ui_->draw(
             solverParams_,
             renderParams_,
             defaultMaterial_,
             scene_.surface().material(),
             scene_.surface().renderParams(),
+            planeSideLength,
             gravityLikeForce_,
             sim_->mergeSplitController());
+        if (actions.setPlaneSideLength && planeSurface) {
+            planeSurface->setSideLength(actions.planeSideLength);
+        }
         if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
         if (actions.applyGravity) {
             gravityLikeForce_ = actions.gravityForce;
