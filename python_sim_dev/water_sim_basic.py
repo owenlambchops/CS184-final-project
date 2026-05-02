@@ -196,26 +196,33 @@ def apply_global_volume_correction(
 def apply_implicit_mean_curvature_flow(
     x, faces, dt, gamma, density, fixed_vertices=None
 ):
-    """Paper Eq. (5): implicit mean-curvature-flow positional update."""
-    """Same as before, but vertices where fixed_vertices is True keep their original positions."""
     if gamma <= 0.0:
         return x
+
     areas = compute_lumped_areas(x, faces)
     L = build_laplacian_matrix(x, faces)
-    # Build sparse mass matrix (lumped diagonal) so sparse arithmetic works
     M = areas * density
     M_mat = diags(M)
-    A = (M_mat - (gamma * dt) * L).tocsr()
+
+    A = (M_mat + (gamma * dt) * L).tocsr()
+
+    # Regularize: add small epsilon to diagonal to ensure positive definiteness
+    n = len(x)
+    eps_reg = 1e-8 * sparse_eye(n, format='csr')
+    A = A + eps_reg
+
     x_new = np.zeros_like(x)
     for dim in range(3):
-        b = areas * x[:, dim]
-        sol, info = cg(A, b, rtol=1e-5, maxiter=200)
+        b = M * x[:, dim]
+        sol, info = cg(A, b, rtol=1e-6, maxiter=1000)
         if info != 0 or not np.all(np.isfinite(sol)):
+            print(f"  CG failed dim={dim} info={info}, returning x")
             return x
         x_new[:, dim] = sol
-    # Overwrite positions of fixed vertices with original coordinates
+
     if fixed_vertices is not None:
-        x_new[fixed_vertices] = x[fixed_vertices]
+        x_new[fixed_vertices, 2] = x[fixed_vertices, 2]   # fix z only
+
     return x_new
 
 
@@ -310,4 +317,206 @@ def step(x, v, faces, neighbours, V_initial, dt):
     if not np.all(np.isfinite(x_next)) or not np.all(np.isfinite(v_next)):
         return x.copy(), np.zeros_like(v)
 
+    return x_next, v_next
+
+def step_test(x, v, faces, neighbours, V_initial, dt):
+    # 1. Physics Constants
+    g = np.array([0.0, 0.0, -9.81], dtype=np.float32)
+    gamma = 0.005
+    mu = 1.0
+    nu = 0.0
+    nu_extra = 0.50
+    max_speed = 20.0
+    epsilon = 2
+    density = 1.0
+
+    # 2. Geometry
+    areas = compute_lumped_areas(x, faces)
+    L = build_laplacian_matrix(x, faces)
+    quality_ratio = estimate_mesh_quality(faces, x)
+    eta = nu + (nu_extra if quality_ratio > 2.6 else 0.0)
+
+    # 3. Forces
+    inv_mass = 1.0 / np.where(areas > 1e-8, areas, 1e-8)
+    f_visc = (L @ v) * inv_mass[:, np.newaxis] * eta
+
+    # 4. Integrate Velocity
+    v_next = (v + (g + f_visc) * dt) * (1.0 - mu * dt)
+    speed = np.linalg.norm(v_next, axis=1)
+    speed_scale = np.minimum(1.0, max_speed / np.maximum(speed, 1e-8))
+    v_next *= speed_scale[:, np.newaxis]
+
+    # 5. Volume Preservation Constraints
+    v_trans = np.mean(v_next, axis=0)
+    v_rel = v_next - v_trans
+    v_rel = apply_local_volume_correction(x, v_rel, faces)
+    v_next = v_rel + v_trans
+
+    print(f"After Force Integration - v_rel:\n{v_rel[:4]}")
+    print(f"After Force Integration - Velocities:\n{v_next[:4]}")
+
+    # 6. Predict position and compute collision mask BEFORE curvature flow
+    x_pred = x + v_next * dt
+    collision_mask = x_pred[:, 2] < 0.0   # moved up from step 7
+
+    x_pred_test = x + v_next * dt
+    L_test = build_laplacian_matrix(x_pred_test, faces)
+    lap = L_test @ x_pred_test
+    print(f"L @ x_pred (first 4 vertices):\n{lap[:4]}")
+    print(f"Max |L @ x_pred|: {np.max(np.linalg.norm(lap, axis=1)):.6f}")
+
+    # 7. Implicit mean curvature flow — single call, pinning ground vertices
+    x_next = apply_implicit_mean_curvature_flow(
+        x_pred, faces, dt, gamma, density, fixed_vertices=collision_mask
+    )
+    print(f"After Mean Curvature Flow - Vertices:\n{x_next[:4]}")
+
+    # Reject curvature flow result if it moved vertices unreasonably far
+    max_reasonable_disp = 1.0   # metres — tune to your scale
+    disp = x_next - x_pred
+    if np.max(np.linalg.norm(disp, axis=1)) > max_reasonable_disp:
+        print("WARNING: curvature flow displacement too large, skipping")
+        x_next = x_pred.copy()
+        disp = np.zeros_like(x_pred)
+    else:
+        # Clamp and feed back into velocity only if displacement is reasonable
+        edges = np.vstack((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]))
+        edge_len = np.linalg.norm(x_pred[edges[:, 0]] - x_pred[edges[:, 1]], axis=1)
+        max_disp = 0.25 * max(np.mean(edge_len), 1e-5)
+        disp_len = np.linalg.norm(disp, axis=1, keepdims=True)
+        disp_scale = np.minimum(1.0, max_disp / np.maximum(disp_len, 1e-8))
+        disp *= disp_scale
+        x_next = x_pred + disp
+    v_next = v_next + disp / dt
+
+    print(f"After Curvature Flow + Disp Clamp - Vertices:\n{x_next[:4]}")
+    print(f"After Curvature Flow + Disp Clamp - Velocities:\n{v_next[:4]}")
+
+    """# 8. Ground collision response - bugged version
+    x_next[collision_mask, 2] = 0.0
+    v_next[collision_mask, 2] = np.maximum(0.0, v_next[collision_mask, 2])
+    v_next[collision_mask, :2] *= 0.5"""
+    # 8. Ground collision response — only modify vertices newly hitting ground
+    newly_colliding = collision_mask & (v_next[:, 2] < 0.0)
+    x_next[collision_mask, 2] = 0.0
+    v_next[newly_colliding, 2] *= -0.1          # small restitution, not full zero
+    v_next[collision_mask, 2] = np.maximum(0.0, v_next[collision_mask, 2])
+
+    # 9. Ground friction
+    friction_mask = collision_mask & (np.linalg.norm(v_next[:, :2], axis=1) > epsilon)
+    friction_scale = np.maximum(0.0, 1.0 - epsilon)
+    v_next[friction_mask, :2] *= friction_scale / np.linalg.norm(
+        v_next[friction_mask, :2], axis=1, keepdims=True
+    )
+
+    # 10. Global volume correction
+    x_next = apply_global_volume_correction(
+        x_next, faces, V_initial, ground_mask=collision_mask, radial_spread=0.3
+    )
+    x_next[collision_mask, 2] = 0.0   # re-enforce ground plane after volume correction
+
+    if not np.all(np.isfinite(x_next)) or not np.all(np.isfinite(v_next)):
+        return x.copy(), np.zeros_like(v)
+    return x_next, v_next
+    print(f"After 1 Step - Vertices:\n{x[:8]}")
+    print(f"After 1 Step - Velocities:\n{v[:8]}")
+    print(f"After 1 Step - Volume: {compute_vertex_normals_and_volume(x, faces)[1]:.2f}")
+
+def step_test2(x, v, faces, neighbours, V_initial, dt):
+    # 1. Physics Constants
+    g      = np.array([0.0, 0.0, -9.81], dtype=np.float32)
+    gamma  = 0.005
+    mu     = 0.4      # paper says 0.3–0.5
+    nu     = 0.0
+    nu_extra = 0.50
+    max_speed = 20.0
+    epsilon = 0.1     # friction magnitude coefficient (paper Eq. 2)
+    density = 1.0
+
+    # 2. Geometry
+    areas = compute_lumped_areas(x, faces)
+    L = build_laplacian_matrix(x, faces)
+    quality_ratio = estimate_mesh_quality(faces, x)
+    eta = nu + (nu_extra if quality_ratio > 2.6 else 0.0)
+
+    # ── External Forces (paper Sec. 4.1, strictly in paper order) ────────────
+
+    # Step A: gravity → velocity, then position (paper: v = v + g*dt, x = x + v*dt)
+    v_next = v + g * dt
+    x_next = x + v_next * dt
+
+    # Step B: collision detection and inelastic response (paper Eq. 1)
+    # For static ground plane: n_i = [0,0,1], v_s = 0
+    # v_new = v_old - (v_old · n) * n  →  removes normal component only
+    collision_mask = x_next[:, 2] < 0.0
+    x_next[collision_mask, 2] = 0.0
+    v_next[collision_mask, 2] = 0.0   # remove downward normal component
+
+    # Step C: friction on colliding vertices (paper Eq. 2)
+    # v_new = 0            if |v| < epsilon
+    # v_new = v - eps*v/|v|  otherwise   (subtracts fixed magnitude along v direction)
+    # Paper operates on full 3D velocity of contact vertices
+    if collision_mask.any():
+        v_contact = v_next[collision_mask]
+        speed = np.linalg.norm(v_contact, axis=1, keepdims=True)
+        slow = (speed < epsilon).squeeze(axis=1)
+        fast = ~slow
+
+        # Zero out slow-moving contact vertices
+        v_contact[slow] = 0.0
+
+        # Subtract epsilon along velocity direction for fast-moving ones
+        v_dir = v_contact[fast] / np.maximum(speed[fast], 1e-8)
+        v_contact[fast] -= epsilon * v_dir
+        v_next[collision_mask] = v_contact
+
+        # Immediately adjust position by velocity change (paper: x = x + (v_new-v_old)*dt)
+        v_old_contact = v[collision_mask]
+        x_next[collision_mask] += (v_contact - v_old_contact) * dt
+        x_next[collision_mask, 2] = 0.0   # re-enforce ground plane
+
+    # Step D: viscosity damping (paper Eq. 3) — applied AFTER collision/friction
+    inv_mass = 1.0 / np.where(areas > 1e-8, areas, 1e-8)
+    f_visc = (L @ v_next) * inv_mass[:, np.newaxis] * eta
+    v_next = (1.0 - mu * dt) * v_next + eta * dt * (L @ v_next) * inv_mass[:, np.newaxis]
+
+    # Speed clamp for stability
+    speed = np.linalg.norm(v_next, axis=1)
+    speed_scale = np.minimum(1.0, max_speed / np.maximum(speed, 1e-8))
+    v_next *= speed_scale[:, np.newaxis]
+
+    # ── Volume Preservation on velocity (paper Sec. 4.4 local correction) ────
+    v_trans = np.mean(v_next, axis=0)
+    v_rel = v_next - v_trans
+    v_rel = apply_local_volume_correction(x, v_rel, faces)
+    v_next = v_rel + v_trans
+
+    # ── Mean Curvature Flow (paper Sec. 4.2, Eq. 5) ──────────────────────────
+    x_next = apply_implicit_mean_curvature_flow(
+        x_next, faces, dt, gamma, density, fixed_vertices=collision_mask
+    )
+
+    # Velocity update from curvature displacement (paper Sec. 4.2)
+    disp = x_next - (x + v_next * dt)
+    edges = np.vstack((faces[:, [0,1]], faces[:, [1,2]], faces[:, [2,0]]))
+    edge_len = np.linalg.norm(x[edges[:,0]] - x[edges[:,1]], axis=1)
+    max_disp = 0.25 * max(np.mean(edge_len), 1e-5)
+    disp_len = np.linalg.norm(disp, axis=1, keepdims=True)
+    disp_scale = np.minimum(1.0, max_disp / np.maximum(disp_len, 1e-8))
+    disp *= disp_scale
+    x_next = x + v_next * dt + disp
+    v_next = v_next + disp / dt
+
+    # Re-enforce ground plane after curvature flow
+    x_next[collision_mask, 2] = 0.0
+    v_next[collision_mask, 2] = np.maximum(0.0, v_next[collision_mask, 2])
+
+    # ── Global Volume Correction (paper Sec. 4.4) ─────────────────────────────
+    x_next = apply_global_volume_correction(
+        x_next, faces, V_initial, ground_mask=collision_mask, radial_spread=0.3
+    )
+    x_next[collision_mask, 2] = 0.0
+
+    if not np.all(np.isfinite(x_next)) or not np.all(np.isfinite(v_next)):
+        return x.copy(), np.zeros_like(v)
     return x_next, v_next
