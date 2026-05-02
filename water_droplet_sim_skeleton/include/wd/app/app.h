@@ -27,6 +27,7 @@ private:
     void processInput();
     void update();
     void render();
+    void updateHudTitle();
     void destroyRenderResources();
     void shutdown();
 
@@ -42,7 +43,8 @@ private:
     SolverParams solverParams_;
     RenderParams renderParams_;
     MaterialParams defaultMaterial_;
-    Vec3 gravityLikeForce_ = Vec3(-7.0, -3.0, 0.0);
+    Vec3 gravityLikeForce_ = Vec3(0.0, -9.81, 0.0);
+    // Vec3 gravityLikeForce_ = Vec3(-7.0, -3.0, 0.0);
     // Vec3 gravityLikeForce_ = Vec3(0.0, 0.0, 0.0);
 
     std::shared_ptr<DragForceField> dragField_;
@@ -67,6 +69,13 @@ private:
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool wireframe_ = false;
+    bool wireframeKeyWasDown_ = false;
+    bool incKeyWasDown_ = false;
+    bool decKeyWasDown_ = false;
+    bool tuneSelectUpWasDown_ = false;
+    bool tuneSelectDownWasDown_ = false;
+    int tuneIndex_ = 0;
 };
 
 } // namespace wd

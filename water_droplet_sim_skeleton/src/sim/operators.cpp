@@ -119,6 +119,52 @@ double computeClosedVolumeLocal(const Droplet& drop) {
     return std::abs(V);
 }
 
+std::vector<double> computeLumpedAreas(const Droplet& drop) {
+    const auto& X = drop.positions();
+    const auto& F = drop.faces();
+    std::vector<double> areas(X.rows(), 0.0);
+
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const int i0 = F(fi, 0);
+        const int i1 = F(fi, 1);
+        const int i2 = F(fi, 2);
+        const Vec3 p0 = X.row(i0).transpose();
+        const Vec3 p1 = X.row(i1).transpose();
+        const Vec3 p2 = X.row(i2).transpose();
+        const double triArea = 0.5 * ((p1 - p0).cross(p2 - p0)).norm();
+        const double share = triArea / 3.0;
+        areas[i0] += share;
+        areas[i1] += share;
+        areas[i2] += share;
+    }
+    return areas;
+}
+
+double computeMeanEdgeLength(const Droplet& drop) {
+    const auto& X = drop.positions();
+    const auto& F = drop.faces();
+    double sumLen = 0.0;
+    int edgeCount = 0;
+
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const int i0 = F(fi, 0);
+        const int i1 = F(fi, 1);
+        const int i2 = F(fi, 2);
+
+        const Vec3 p0 = X.row(i0).transpose();
+        const Vec3 p1 = X.row(i1).transpose();
+        const Vec3 p2 = X.row(i2).transpose();
+
+        sumLen += (p1 - p0).norm();
+        sumLen += (p2 - p1).norm();
+        sumLen += (p0 - p2).norm();
+        edgeCount += 3;
+    }
+
+    if (edgeCount == 0) return 0.0;
+    return sumLen / static_cast<double>(edgeCount);
+}
+
 } // namespace
 
 void ExternalForceOperator::apply(
@@ -275,21 +321,100 @@ double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&
 }
 
 void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) const {
+    (void)surface;
+    (void)dt;
+
+    auto& X = drop.positions();
     auto& U = drop.velocities();
     const auto& N = drop.derived().vertexNormals;
+    const auto& F = drop.faces();
+    const int n = X.rows();
+    if (n == 0) return;
 
     const double target = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
     if (target <= 0.0) return;
 
-    const double current = computeClosedVolume(drop, surface);
-    const double density = std::max(drop.material().density, 1e-8);
-    const double kv = std::max(0.0, drop.material().volumeStiffness);
-    // Python parity: f_vol = k_v * (V0 - V) * n, then a = f_vol / density.
-    const double coeff = kv * (target - current) / density;
+    const std::vector<double> lumpedAreas = computeLumpedAreas(drop);
+    double sumArea = 0.0;
+    for (double a : lumpedAreas) sumArea += a;
+    if (sumArea <= 1e-12) return;
 
-    for (int i = 0; i < U.rows(); ++i) {
-        U.row(i) += (coeff * dt * N.row(i).transpose()).transpose();
+    const double current = computeClosedVolumeLocal(drop);
+    const double dV = target - current;
+    const double relErr = std::abs(dV) / std::max(target, 1e-8);
+    if (relErr < 1e-5) return;
+
+    const auto neighbours = buildNeighbours(F, n);
+
+    // 1) Remove rigid velocity (translation + rotation): u_i = v_i - v_rigid_i.
+    const Vec3 com = X.colwise().mean().transpose();
+    const Vec3 vCom = U.colwise().mean().transpose();
+
+    Eigen::Matrix3d M = Eigen::Matrix3d::Zero();
+    Vec3 b = Vec3::Zero();
+    for (int i = 0; i < n; ++i) {
+        const double wi = std::max(lumpedAreas[i], 0.0);
+        const Vec3 r = X.row(i).transpose() - com;
+        const Vec3 vRel = U.row(i).transpose() - vCom;
+        M += wi * ((r.squaredNorm() * Eigen::Matrix3d::Identity()) - (r * r.transpose()));
+        b += wi * r.cross(vRel);
+    }
+
+    Vec3 omega = Vec3::Zero();
+    Eigen::LDLT<Eigen::Matrix3d> ldlt(M);
+    if (ldlt.info() == Eigen::Success) {
+        omega = ldlt.solve(b);
+        if (!omega.array().isFinite().all()) omega.setZero();
+    }
+
+    MatX3d uDef = MatX3d::Zero(n, 3);
+    std::vector<double> aRate(n, 0.0);
+    for (int i = 0; i < n; ++i) {
+        const Vec3 r = X.row(i).transpose() - com;
+        const Vec3 vRigid = vCom + omega.cross(r);
+        const Vec3 u = U.row(i).transpose() - vRigid;
+        uDef.row(i) = u.transpose();
+
+        Vec3 ni = N.row(i).transpose();
+        const double niNorm = ni.norm();
+        if (niNorm > 1e-12) ni /= niNorm;
+        else ni.setZero();
+        aRate[i] = u.dot(ni);
+    }
+
+    // 2) Eq. (10)-(11): local area-weighted average, subtract normal component from deforming velocity.
+    for (int i = 0; i < n; ++i) {
+        double num = lumpedAreas[i] * aRate[i];
+        double den = lumpedAreas[i];
+        for (int j : neighbours[i]) {
+            const double Aj = lumpedAreas[j];
+            num += Aj * aRate[j];
+            den += Aj;
+        }
+        if (den <= 1e-12) continue;
+        const double aBar = num / den;
+
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+
+        const Vec3 uCorr = uDef.row(i).transpose() - aBar * ni;
+        const Vec3 r = X.row(i).transpose() - com;
+        const Vec3 vRigid = vCom + omega.cross(r);
+        U.row(i) = (vRigid + uCorr).transpose();
+    }
+
+    // Global volume correction: d = ΔV / A, then x_i += d n_i.
+    const double d = dV / sumArea;
+    for (int i = 0; i < n; ++i) {
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+        X.row(i) += (d * ni).transpose();
     }
 }
+
 
 } // namespace wd

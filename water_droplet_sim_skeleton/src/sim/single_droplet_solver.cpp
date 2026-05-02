@@ -33,13 +33,17 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
         }
 
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
-
-        if (params_.enableCollision) {
-            collision_.apply(
-                drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
-        }
+        if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
         
-        // Volume correction is already included in computeAcceleration().
+        // Volume correction must run on the live droplet state.
+        // This preserves local-first/global-second logic in VolumeCorrector::apply:
+        // local velocity correction uses current U, then global position correction updates X.
+        if (params_.enableVolumeCorrect) {
+            drop.updateDerived();
+            volume_.apply(drop, surface, dt);
+        }
+
+        drop.updateDerived();
     }
 
     drop.updateDerived();
@@ -55,7 +59,6 @@ MatX3d SingleDropletSolver::computeAcceleration(
 
     if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
     if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
-    if (params_.enableVolumeCorrect) volume_.apply(internalDrop, surface, 1.0);
 
     MatX3d aInternal = internalDrop.velocities();
     const double maxA = std::max(params_.maxInternalAccel, 0.0);

@@ -13,6 +13,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 
@@ -251,7 +252,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    auto tpl = DropletTemplate::CreateSphericalMesh(3, 0.20);
+    auto tpl = DropletTemplate::CreateSphericalMesh(4, 0.20);
     DropletFactory factory(tpl);
 
     SpawnDesc desc;
@@ -301,6 +302,53 @@ void App::processInput() {
     }
     restartKeyWasDown_ = restartKeyDown;
 
+    const bool wireframeKeyDown = glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS;
+    if (wireframeKeyDown && !wireframeKeyWasDown_) {
+        wireframe_ = !wireframe_;
+        glPolygonMode(GL_FRONT_AND_BACK, wireframe_ ? GL_LINE : GL_FILL);
+    }
+    wireframeKeyWasDown_ = wireframeKeyDown;
+
+    // Runtime tuning controls:
+    // Up/Down: choose parameter
+    // Right/Left: increase/decrease selected parameter
+    const bool tuneUpDown = glfwGetKey(window_, GLFW_KEY_UP) == GLFW_PRESS;
+    if (tuneUpDown && !tuneSelectUpWasDown_) {
+        tuneIndex_ = (tuneIndex_ + 6) % 7;
+    }
+    tuneSelectUpWasDown_ = tuneUpDown;
+
+    const bool tuneDownDown = glfwGetKey(window_, GLFW_KEY_DOWN) == GLFW_PRESS;
+    if (tuneDownDown && !tuneSelectDownWasDown_) {
+        tuneIndex_ = (tuneIndex_ + 1) % 7;
+    }
+    tuneSelectDownWasDown_ = tuneDownDown;
+
+    const bool incDown = glfwGetKey(window_, GLFW_KEY_RIGHT) == GLFW_PRESS;
+    const bool decDown = glfwGetKey(window_, GLFW_KEY_LEFT) == GLFW_PRESS;
+    if ((incDown && !incKeyWasDown_) || (decDown && !decKeyWasDown_)) {
+        const double dir = incDown ? 1.0 : -1.0;
+        auto tune = [&](double& v, double step, double lo, double hi) {
+            v = std::clamp(v + dir * step, lo, hi);
+        };
+
+        switch (tuneIndex_) {
+            case 0: tune(defaultMaterial_.surfaceTension, 100.0, 0.0, 10000.0); break;
+            case 1: tune(defaultMaterial_.viscousDamping, 0.2, 0.0, 50.0); break;
+            case 2: tune(defaultMaterial_.laplacianViscosity, 0.2, 0.0, 50.0); break;
+            case 3: tune(defaultMaterial_.density, 0.05, 0.05, 10.0); break;
+            case 4: tune(defaultMaterial_.contactStiffness, 0.1, 0.0, 20.0); break;
+            case 5: tune(defaultMaterial_.friction, 0.02, 0.0, 2.0); break;
+            default: break;
+        }
+
+        for (auto& d : scene_.droplets()) {
+            d->material() = defaultMaterial_;
+        }
+    }
+    incKeyWasDown_ = incDown;
+    decKeyWasDown_ = decDown;
+
     if (input_) {
         double mouseX = 0.0;
         double mouseY = 0.0;
@@ -319,6 +367,47 @@ void App::update() {
         sim_->step(scene_);
         singleStepRequested_ = false;
     }
+    updateHudTitle();
+}
+
+void App::updateHudTitle() {
+    if (window_ == nullptr) return;
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(3);
+    ss << "Water Droplet Simulator";
+    ss << " | mode:" << (wireframe_ ? "wire" : "solid");
+    ss << " | t=" << (sim_ ? sim_->timeSec() : 0.0);
+
+    if (!scene_.droplets().empty()) {
+        const auto& d = *scene_.droplets().front();
+        const double target = (d.targetVolume() > 0.0) ? d.targetVolume() : d.derived().restVolume;
+        const double current = d.derived().currentVolume;
+        const double err = (target > 1e-12) ? (current - target) / target : 0.0;
+
+        double speedMean = 0.0;
+        double speedMax = 0.0;
+        for (int i = 0; i < d.velocities().rows(); ++i) {
+            const double s = d.velocities().row(i).norm();
+            speedMean += s;
+            speedMax = std::max(speedMax, s);
+        }
+        if (d.velocities().rows() > 0) speedMean /= static_cast<double>(d.velocities().rows());
+
+        ss << " | V=" << current << " V0=" << target << " dV=" << err;
+        ss << " | fpR=" << d.derived().footprintRadius;
+        ss << " | elong=" << d.derived().elongationRatio;
+        ss << " | |u|mean/max=" << speedMean << "/" << speedMax;
+        ss << " | gamma=" << d.material().surfaceTension;
+        ss << " mu=" << d.material().viscousDamping;
+        ss << " eta=" << d.material().laplacianViscosity;
+        ss << " rho=" << d.material().density;
+    }
+
+    static const char* kNames[] = {"gamma", "kv", "mu", "eta", "rho", "alpha", "fric"};
+    ss << " | tune[" << kNames[std::clamp(tuneIndex_, 0, 6)] << "] Up/Down select Left/Right edit W wire";
+
+    glfwSetWindowTitle(window_, ss.str().c_str());
 }
 
 void App::render() {
