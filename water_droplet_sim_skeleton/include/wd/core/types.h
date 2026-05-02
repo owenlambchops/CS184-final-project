@@ -57,9 +57,9 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 4000.0;           // gamma
-    double viscousDamping = 16.0;          // mu
-    double laplacianViscosity = 8.0;      // eta
+    double surfaceTension = 0.50;           // gamma
+    double viscousDamping = 0.30;          // mu
+    double laplacianViscosity = 0.10;      // eta
     double density = 0.10;
     double contactStiffness = 3.0;         // alpha
     double friction = 0.1;
@@ -80,13 +80,12 @@ struct SolverParams {
     bool enableCurvatureFlow = true;
     bool enableContactAngle = true;
     bool enableVolumeCorrect = true;
-    bool enableEdgeLengthRegularizer = false;
-    // TODO(remesh-step2): Add adaptive remesh controls.
-    // bool enableAdaptiveRemesh = false;
-    // double remeshTargetEdgeLength = 0.0;   // 0 => use restMeanEdgeLength
-    // double remeshSplitThreshold = 1.33;
-    // double remeshCollapseThreshold = 0.75;
-    // int remeshMaxOpsPerSubstep = 64;
+    bool enableEdgeLengthRegularizer = true;
+    bool enableAdaptiveRemesh = false;
+    double remeshTargetEdgeLength = 0.0;   // 0 => use restMeanEdgeLength
+    double remeshSplitThreshold = 1.33;
+    double remeshCollapseThreshold = 0.75;
+    int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.05;
@@ -95,7 +94,7 @@ struct SolverParams {
     double vertexDamping = 0.0;
 
     double edgeLengthTargetRatio = 1.0;
-    double edgeLengthStiffness = 10.0;
+    double edgeLengthStiffness = 8.0;
     double edgeLengthMaxRelSpeed = 2.0;
 };
 

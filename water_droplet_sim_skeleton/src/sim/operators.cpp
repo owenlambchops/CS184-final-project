@@ -188,42 +188,24 @@ void CollisionProjector::apply(
         double pushoutEps,
         double adhesionDist,
         double dt) const {
+    (void)pushoutEps;
+    (void)adhesionDist;
+    (void)dt;
+
     auto& X = drop.positions();
     auto& U = drop.velocities();
 
-    const double frictionCoeff = std::max(0.0, drop.material().friction);
-
     for (int i = 0; i < X.rows(); ++i) {
-        SurfaceSample s = surface.closestSample(X.row(i).transpose());
-
+        const SurfaceSample s = surface.closestSample(X.row(i).transpose());
         if (s.signedDistance < 0.0) {
-            X.row(i) = (s.position + s.normal * pushoutEps).transpose();
+            // Project position onto the surface.
+            X.row(i) = s.position.transpose();
+
+            // Zero normal velocity component (keep tangential motion only).
             Vec3 v = U.row(i).transpose();
             const double vn = v.dot(s.normal);
-            if (vn < 0.0) {
-                v -= (1.2 * vn) * s.normal;
-            }
+            v -= vn * s.normal;
             U.row(i) = v.transpose();
-            s = surface.closestSample(X.row(i).transpose());
-        }
-
-        if (s.signedDistance <= adhesionDist) {
-            Vec3 v = U.row(i).transpose();
-            const double vn = v.dot(s.normal);
-            Vec3 vt = v - vn * s.normal;
-            const double speed = vt.norm();
-
-            if (speed > 0.0) {
-                const double dropAmount = frictionCoeff * dt;
-                if (speed < dropAmount) {
-                    vt = Vec3::Zero();
-                } else {
-                    vt *= (speed - dropAmount) / speed;
-                }
-                vt *= (1.0 - 0.05 * dt);
-            }
-
-            U.row(i) = (vt + vn * s.normal).transpose();
         }
     }
 }
@@ -273,8 +255,17 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
     const double gamma = drop.material().surfaceTension;
     const double density = std::max(drop.material().density, 1e-8);
+    for (int i = 0; i < U.rows(); ++i) {
+        const Vec3 dxi = deltaX.row(i).transpose();
+        if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
 
-    U += ((gamma / density) * dt) * deltaX;
+        // Surface-tension force: f_st = gamma * delta_x[i]
+        const Vec3 f_st = gamma * dxi;
+        // Acceleration from surface tension: a_st = f_st / density
+        const Vec3 a_st = f_st / density;
+
+        U.row(i) += (a_st * dt).transpose();
+    }
 }
 
 void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
