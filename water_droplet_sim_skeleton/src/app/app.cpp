@@ -257,7 +257,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    auto tpl = DropletTemplate::CreateSphericalMesh(3, 0.20);
+    auto tpl = DropletTemplate::CreateSphericalMesh(2, 0.20);
     DropletFactory factory(tpl);
 
     SpawnDesc desc;

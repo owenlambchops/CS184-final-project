@@ -57,17 +57,17 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 0.50;           // gamma
-    double viscousDamping = 0.30;          // mu
-    double laplacianViscosity = 0.10;      // eta
-    double density = 0.10;
-    double contactStiffness = 3.0;         // alpha
-    double friction = 0.1;
+    double surfaceTension = 1000.0;           // gamma
+    double viscousDamping = 8.0;          // mu
+    double laplacianViscosity = 3.0;      // eta
+    double density = 1.0;
+    double contactStiffness = 0.10;         // alpha
+    double friction = 0.0;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = true;
     // damping_gain=1.6, # Apply new robust damping
-    double advContactAngleDeg = 89.0;      // theta_adv
-    double recContactAngleDeg = 91.0;      // theta_rec    
+    double advContactAngleDeg = 95.0;      // theta_adv
+    double recContactAngleDeg = 70.0;      // theta_rec
 };
 
 struct SolverParams {
@@ -78,24 +78,16 @@ struct SolverParams {
     bool enableCollision = true;
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
-    bool enableContactAngle = true;
+    bool enableContactAngle = false;
     bool enableVolumeCorrect = true;
-    bool enableEdgeLengthRegularizer = true;
-    bool enableAdaptiveRemesh = false;
-    double remeshTargetEdgeLength = 0.0;   // 0 => use restMeanEdgeLength
-    double remeshSplitThreshold = 1.33;
-    double remeshCollapseThreshold = 0.75;
     int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;
-    double adhesionDistance = 0.05;
+    double adhesionDistance = 0.005;
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
     double vertexDamping = 0.0;
 
-    double edgeLengthTargetRatio = 1.0;
-    double edgeLengthStiffness = 8.0;
-    double edgeLengthMaxRelSpeed = 2.0;
 };
 
 struct RenderParams {

@@ -188,24 +188,36 @@ void CollisionProjector::apply(
         double pushoutEps,
         double adhesionDist,
         double dt) const {
-    (void)pushoutEps;
     (void)adhesionDist;
-    (void)dt;
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
+    const double eps = std::max(0.0, drop.material().friction);
 
     for (int i = 0; i < X.rows(); ++i) {
-        const SurfaceSample s = surface.closestSample(X.row(i).transpose());
+        SurfaceSample s = surface.closestSample(X.row(i).transpose());
         if (s.signedDistance < 0.0) {
-            // Project position onto the surface.
-            X.row(i) = s.position.transpose();
+            // 1) Project penetrated vertex to the closest point on the solid.
+            X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
+            s = surface.closestSample(X.row(i).transpose());
 
-            // Zero normal velocity component (keep tangential motion only).
-            Vec3 v = U.row(i).transpose();
-            const double vn = v.dot(s.normal);
-            v -= vn * s.normal;
-            U.row(i) = v.transpose();
+            const Vec3 n = s.normal.normalized();
+            const Vec3 vOld = U.row(i).transpose();
+
+            // 2) Eq. (1): remove relative normal velocity (v_s = 0 for static solid).
+            Vec3 vNew = vOld - (vOld.dot(n)) * n;
+
+            // 3) Eq. (2): friction magnitude rule on colliding vertices.
+            const double speed = vNew.norm();
+            if (speed < eps) {
+                vNew.setZero();
+            } else if (speed > 1e-12) {
+                vNew -= eps * (vNew / speed);
+            }
+
+            // 4) Immediate position correction by velocity change.
+            X.row(i) += ((vNew - vOld) * dt).transpose();
+            U.row(i) = vNew.transpose();
         }
     }
 }
@@ -215,8 +227,11 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
     auto& U = drop.velocities();
 
     const double mu = std::max(0.0, drop.material().viscousDamping);
-    const double eta = std::max(0.0, drop.material().laplacianViscosity);
+    double eta = std::max(0.0, drop.material().laplacianViscosity);
     const double dampingGain = 1.0;
+    const double minEdge = std::max(drop.derived().minEdgeLength, 1e-8);
+    const double edgeSkew = drop.derived().maxEdgeLength / minEdge;
+    if (edgeSkew > 1.5) eta *= 2.0; // paper-style extra viscosity under poor mesh quality
 
     auto neighbours = buildNeighbours(drop.faces(), X.rows());
     Weights w = computeCotangentWeights(X, drop.faces());
@@ -255,16 +270,15 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
     const double gamma = drop.material().surfaceTension;
     const double density = std::max(drop.material().density, 1e-8);
-    for (int i = 0; i < U.rows(); ++i) {
+    for (int i = 0; i < X.rows(); ++i) {
         const Vec3 dxi = deltaX.row(i).transpose();
         if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
 
-        // Surface-tension force: f_st = gamma * delta_x[i]
-        const Vec3 f_st = gamma * dxi;
-        // Acceleration from surface tension: a_st = f_st / density
-        const Vec3 a_st = f_st / density;
-
-        U.row(i) += (a_st * dt).transpose();
+        // Python parity:
+        // f_st = gamma * delta_x, then a_st = f_st / density and v += a_st * dt.
+        const Vec3 fSt = gamma * dxi;
+        const Vec3 aSt = fSt / density;
+        U.row(i) += (aSt * dt).transpose();
     }
 }
 
@@ -413,47 +427,5 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) c
         }
     }
 }
-
-void EdgeLengthRegularizer::apply(
-        Droplet& drop, double dt, double targetRatio, double stiffness, double maxRelativeSpeed) const {
-    if (dt <= 0.0) return;
-    if (stiffness <= 0.0) return;
-
-    const auto& E = drop.edges();
-    if (E.empty()) return;
-
-    auto& X = drop.positions();
-    auto& U = drop.velocities();
-    const int n = X.rows();
-    if (n == 0) return;
-
-    const double restMean = std::max(drop.derived().restMeanEdgeLength, 1e-8);
-    const double targetLen = std::max(1e-8, targetRatio * restMean);
-    const double maxCorrSpeed = std::max(0.0, maxRelativeSpeed) * targetLen;
-
-    MatX3d dU = MatX3d::Zero(n, 3);
-    for (const auto& e : E) {
-        const int i = e.x();
-        const int j = e.y();
-        if (i < 0 || j < 0 || i >= n || j >= n) continue;
-
-        const Vec3 xi = X.row(i).transpose();
-        const Vec3 xj = X.row(j).transpose();
-        const Vec3 edge = xj - xi;
-        const double len = edge.norm();
-        if (len <= 1e-12) continue;
-
-        const Vec3 dir = edge / len;
-        double corrSpeed = stiffness * (len - targetLen);
-        corrSpeed = std::clamp(corrSpeed, -maxCorrSpeed, maxCorrSpeed);
-        const Vec3 dv = 0.5 * corrSpeed * dir;
-
-        dU.row(i) += dv.transpose();
-        dU.row(j) -= dv.transpose();
-    }
-
-    U += dt * dU;
-}
-
 
 } // namespace wd

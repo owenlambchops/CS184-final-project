@@ -70,6 +70,22 @@ void Droplet::updateDerived() {
     // 3) Edge statistics and per-vertex mean incident edge length.
     derived_.vertexMeanEdgeLength = Eigen::VectorXd::Zero(n);
     std::vector<int> edgeDegree(n, 0);
+    // Fallback: if runtime edges are missing/stale, rebuild from faces.
+    if (E_.empty()) {
+        std::set<std::pair<int, int>> edgeSet;
+        auto addEdge = [&](int a, int b) {
+            if (a > b) std::swap(a, b);
+            edgeSet.emplace(a, b);
+        };
+        for (int fi = 0; fi < F.rows(); ++fi) {
+            addEdge(F(fi, 0), F(fi, 1));
+            addEdge(F(fi, 1), F(fi, 2));
+            addEdge(F(fi, 2), F(fi, 0));
+        }
+        E_.clear();
+        E_.reserve(edgeSet.size());
+        for (const auto& e : edgeSet) E_.emplace_back(e.first, e.second);
+    }
     const auto& E = E_;
 
     double minLen = std::numeric_limits<double>::infinity();

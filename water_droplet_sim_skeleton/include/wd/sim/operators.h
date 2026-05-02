@@ -36,11 +36,6 @@ public:
     void apply(Droplet& drop, const ISurface& surface, double dt) const;
 };
 
-class EdgeLengthRegularizer {
-public:
-    void apply(Droplet& drop, double dt, double targetRatio, double stiffness, double maxRelativeSpeed) const;
-};
-
 // TODO(remesh-step2): Add true topology-changing remeshing operator.
 // class AdaptiveRemesher {
 // public:
