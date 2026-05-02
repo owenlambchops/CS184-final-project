@@ -23,7 +23,7 @@ public:
                    MergeSplitController& mergeSplit);
 
 private:
-    Vec3 spawnAnchor_ = Vec3::Zero();
+    Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
     Vec3 gravityDraft_ = Vec3::Zero();
     bool gravityDraftInitialized_ = false;
 };

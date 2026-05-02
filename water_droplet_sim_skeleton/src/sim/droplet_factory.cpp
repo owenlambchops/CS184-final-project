@@ -5,27 +5,15 @@ namespace wd {
 
 DropletFactory::DropletFactory(std::shared_ptr<const DropletTemplate> tpl) : tpl_(std::move(tpl)) {}
 
-std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, const ISurface& surface) const {
+std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, const ISurface&) const {
     auto drop = std::make_unique<Droplet>(id, tpl_, desc.material);
-    SurfaceSample s = surface.closestSample(desc.anchorWorld);
 
     auto& X = drop->positions();
     auto& U = drop->velocities();
 
-    double minNormalOffset = 0.0;
-    for (int i = 0; i < tpl_->restVertices().rows(); ++i) {
-        minNormalOffset = std::min(minNormalOffset, tpl_->restVertices()(i, 1));
-    }
-    const double lift = -minNormalOffset + 1e-4;
-
     for (int i = 0; i < X.rows(); ++i) {
         Vec3 local = tpl_->restVertices().row(i).transpose();
-        Vec3 world =
-            s.position
-            + local.x() * s.tangentU
-            + (local.y() + lift) * s.normal
-            + local.z() * s.tangentV;
-
+        Vec3 world = desc.anchorWorld + local;
         X.row(i) = world.transpose();
         U.row(i) = desc.initialVelocity.transpose();
     }
