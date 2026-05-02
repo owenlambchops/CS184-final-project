@@ -41,4 +41,14 @@ public:
     void apply(Droplet& drop, double dt, double targetRatio, double stiffness, double maxRelativeSpeed) const;
 };
 
+// TODO(remesh-step2): Add true topology-changing remeshing operator.
+// class AdaptiveRemesher {
+// public:
+//     void apply(Droplet& drop, double targetLen, double splitThresh, double collapseThresh, int maxOps) const;
+// private:
+//     bool splitLongestEdge(Droplet& drop, double splitLen) const;
+//     bool collapseShortestEdge(Droplet& drop, double collapseLen) const;
+//     void rebuildConnectivity(Droplet& drop) const;
+// };
+
 } // namespace wd

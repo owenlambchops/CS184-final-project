@@ -21,6 +21,12 @@ Droplet::Droplet(int id, std::shared_ptr<const DropletTemplate> tpl, const Mater
 }
 
 void Droplet::updateDerived() {
+    // TODO(remesh-step2): After topology edits, call rebuildEdgesFromFaces() before updateDerived().
+    // TODO(remesh-step3): Add validation hooks:
+    // - detect non-manifold edges
+    // - detect flipped/degenerate faces
+    // - compute min triangle area for stability diagnostics
+
     const int n = static_cast<int>(X_.rows());
     if (n == 0) return;
 

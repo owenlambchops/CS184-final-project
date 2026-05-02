@@ -48,6 +48,12 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             edgeRegularizer_.apply(
                 drop, dt, params_.edgeLengthTargetRatio, params_.edgeLengthStiffness, params_.edgeLengthMaxRelSpeed);
         }
+        // TODO(remesh-step2): Insert topology-changing remesh pass here (split/collapse/flip).
+        // Suggested order:
+        // 1) split long edges
+        // 2) collapse short edges
+        // 3) optional edge flips for valence quality
+        // 4) rebuild edges + remove degenerate faces + updateDerived()
 
         drop.updateDerived();
     }

@@ -14,6 +14,9 @@ public:
 
 private:
     MatX3d computeAcceleration(const Droplet& drop, const ISurface& surface, const IForceField& field, double timeSec) const;
+    // TODO(remesh-step2): Add remesh-stage entry point and diagnostics.
+    // - void applyAdaptiveRemesh(Droplet& drop, double dt) const;
+    // - void logMeshQuality(const Droplet& drop) const;
 
     SolverParams params_;
     ExternalForceOperator external_;

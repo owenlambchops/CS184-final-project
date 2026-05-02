@@ -32,6 +32,12 @@ public:
     DropletDerivedData& derived() { return derived_; }
 
     void updateDerived();
+    // TODO(remesh-step2): Add runtime topology helpers used by split/collapse remeshing.
+    // - void rebuildEdgesFromFaces();
+    // - std::vector<std::vector<int>> buildVertexFaceAdjacency() const;
+    // - std::vector<std::vector<int>> buildVertexVertexAdjacency() const;
+    // - bool validateManifoldTopology() const;
+    // - void removeDegenerateFaces(double areaEps);
 
 private:
     int id_;
