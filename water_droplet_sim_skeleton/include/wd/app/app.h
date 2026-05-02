@@ -1,7 +1,9 @@
 #pragma once
 #include "wd/core/scene.h"
 #include "wd/experiments/experiment_logger.h"
+#include "wd/forces/droplet_drag_force_field.h"    
 #include "wd/interaction/drag_interactor.h"
+#include "wd/interaction/droplet_drag_interactor.h"
 #include "wd/interaction/input_router.h"
 #include "wd/render/droplet_gpu_cache.h"
 #include "wd/render/refractive_renderer.h"
@@ -27,6 +29,9 @@ private:
     void processInput();
     void update();
     void render();
+    void updateCameraControls(double dt);
+    void spawnDropletAt(const Vec3& anchorWorld);
+    void rebuildPlaneGpuMesh();
     void destroyRenderResources();
     void shutdown();
 
@@ -44,11 +49,16 @@ private:
     MaterialParams defaultMaterial_;
     Vec3 gravityLikeForce_ = Vec3(0.0, -9.8, 0.0);
 
+    std::shared_ptr<ConstantForceField> gravityField_;
     std::shared_ptr<DragForceField> dragField_;
+    std::shared_ptr<DropletDragForceField> dropletDragField_;
+    std::shared_ptr<const DropletTemplate> dropletTemplate_;
+    int nextDropletId_ = 1; 
 
     DropletGpuCache dropletCache_;
     std::unique_ptr<InputRouter> input_;
     std::unique_ptr<DragInteractor> dragInteractor_;
+    std::unique_ptr<DropletDragInteractor> dropletDragInteractor_;
     std::unique_ptr<UiController> ui_;
     std::unique_ptr<SimulationSystem> sim_;
     std::unique_ptr<RefractiveRenderer> renderer_;
@@ -66,6 +76,15 @@ private:
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool screenshotRequested_ = false;
+
+    bool   cameraRightDragActive_ = false;
+    double lastCameraMouseX_      = 0.0;
+    double lastCameraMouseY_      = 0.0;
+    double cameraScrollVelocity_  = 0.0;
+
+    double lastFrameTimeSec_          = 0.0;
+    bool   simulationAdvancedThisFrame_ = false;
 };
 
 } // namespace wd

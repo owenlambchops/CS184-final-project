@@ -2,6 +2,8 @@
 #include "wd/sim/droplet_factory.h"
 #include "wd/sim/droplet_template.h"
 #include "wd/surface/plane_surface.h"
+#include "wd/forces/droplet_drag_force_field.h"
+#include "wd/interaction/droplet_drag_interactor.h"
 
 #include <array>
 #include <chrono>
@@ -12,6 +14,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -19,6 +24,8 @@
 namespace wd {
 
 namespace {
+
+constexpr double kMaxCameraDt = 0.1;
 
 glm::vec3 toGlm(const Vec3& v) {
     return glm::vec3(static_cast<float>(v.x()),
@@ -62,7 +69,8 @@ unsigned int compileShader(unsigned int type, const std::filesystem::path& path)
 }
 
 unsigned int createShaderProgram(
-    const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath) {
+    const std::filesystem::path& vertexPath,
+    const std::filesystem::path& fragmentPath) {
     const unsigned int vertexShader = compileShader(GL_VERTEX_SHADER, vertexPath);
     if (vertexShader == 0) return 0;
 
@@ -182,8 +190,17 @@ bool App::initialize() {
 
     renderer_ = std::make_unique<RefractiveRenderer>();
     renderer_->initialize(width_, height_);
+
+    // ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window_, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
+    dropletDragInteractor_ = std::make_unique<DropletDragInteractor>(dropletDragField_);
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
 
@@ -201,10 +218,14 @@ void App::initializeGlState() {
 }
 
 bool App::initializeRenderResources() {
-    dropletProgram_ = createShaderProgram("assets/shaders/droplet.vert", "assets/shaders/droplet.frag");
+    dropletProgram_ = createShaderProgram(
+        "assets/shaders/droplet.vert", 
+        "assets/shaders/droplet.frag");
     if (dropletProgram_ == 0) return false;
 
-    planeProgram_ = createShaderProgram("assets/shaders/scene.vert", "assets/shaders/scene.frag");
+    planeProgram_ = createShaderProgram(
+        "assets/shaders/scene.vert", 
+        "assets/shaders/scene.frag");
     if (planeProgram_ == 0) return false;
 
     initializePlaneMesh();
@@ -246,13 +267,21 @@ void App::buildDefaultScene() {
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
 
     auto composite = std::make_shared<CompositeForceField>();
-    composite->addField(std::make_shared<ConstantForceField>(gravityLikeForce_));
+
+    gravityField_ = std::make_shared<ConstantForceField>(gravityLikeForce_);
+    composite->addField(gravityField_);
+
     dragField_ = std::make_shared<DragForceField>();
     composite->addField(dragField_);
+
+
+    dropletDragField_ = std::make_shared<DropletDragForceField>();
+    composite->addField(dropletDragField_);
+
     scene_.setForceField(composite);
 
-    auto tpl = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
-    DropletFactory factory(tpl);
+    dropletTemplate_ = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
+    DropletFactory factory(dropletTemplate_);
 
     SpawnDesc desc;
     desc.anchorWorld = Vec3(0.0, 0.0, 0.0);
@@ -265,14 +294,30 @@ void App::buildDefaultScene() {
     sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
 }
 
+void App::spawnDropletAt(const Vec3& anchorWorld) {
+    if (!scene_.hasSurface() || !dropletTemplate_) return;
+    DropletFactory factory(dropletTemplate_);
+    SpawnDesc desc;
+    desc.anchorWorld     = anchorWorld;
+    desc.initialVelocity = Vec3::Zero();
+    desc.targetVolume    = 0.01;
+    desc.material        = defaultMaterial_;
+    scene_.droplets().push_back(factory.spawn(nextDropletId_++, desc, scene_.surface()));
+}
+
 void App::restartSimulation() {
     dropletCache_.clear();
     scene_ = Scene{};
     sim_.reset();
+    gravityField_.reset();
     dragField_.reset();
+    dropletDragField_.reset();       
+    dropletTemplate_.reset();
+    nextDropletId_ = 1;
 
     buildDefaultScene();
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
+    dropletDragInteractor_ = std::make_unique<DropletDragInteractor>(dropletDragField_);
     singleStepRequested_ = false;
 }
 
@@ -311,13 +356,97 @@ void App::processInput() {
 }
 
 void App::update() {
+    simulationAdvancedThisFrame_ = false;
+ 
+    const double now = glfwGetTime();
+    const double dt  = std::clamp(now - lastFrameTimeSec_, 0.0, kMaxCameraDt);
+    lastFrameTimeSec_ = now;
+
     if (input_) input_->beginFrame();
-    if (dragInteractor_ && input_) {
-        dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
+
+    const bool imguiWantsMouse = ImGui::GetIO().WantCaptureMouse;
+
+    if (!imguiWantsMouse) {
+        updateCameraControls(dt);
     }
+ 
+    if (!imguiWantsMouse && input_) {
+        const InputState& state = input_->state();
+ 
+        // Try droplet drag first; fall back to surface drag if nothing grabbed
+        if (dropletDragInteractor_) {
+            dropletDragInteractor_->update(state, camera_, width_, height_, scene_);
+        }
+ 
+        const bool dropletDragActive = dropletDragField_ && dropletDragField_->active();
+        if (!dropletDragActive && dragInteractor_) {
+            dragInteractor_->update(state, camera_, width_, height_, scene_);
+        }
+    }
+
     if (sim_ && (!paused_ || singleStepRequested_)) {
+        if (dropletDragField_) {
+            for (const auto& d : scene_.droplets()) {
+                dropletDragField_->setActiveDropletId(d->id());
+            }
+        }
         sim_->step(scene_);
-        singleStepRequested_ = false;
+        simulationAdvancedThisFrame_ = true;
+        singleStepRequested_         = false;
+        }
+
+}
+
+void App::updateCameraControls(double dt) {
+    if (!input_ || window_ == nullptr) return;
+
+    const InputState& state = input_->state();
+    const bool rightDown = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    // ── Right-click orbit ─────────────────────────────────────────────────────
+    if (state.rightDown) {
+        if (!cameraRightDragActive_) {
+            cameraRightDragActive_ = true;
+        } else {
+            const double dx = state.mouseX - lastCameraMouseX_;
+            const double dy = state.mouseY - lastCameraMouseY_;
+            // Rotate camera around origin
+            const double sensitivity = 0.0025;
+            Vec3 pos = camera_.position();
+            // Azimuth rotation (around Y)
+            double azimuth = -dx * sensitivity;
+            Eigen::AngleAxisd rotY(azimuth, Vec3::UnitY());
+            pos = rotY * pos;
+            // Elevation rotation (around camera right)
+            Vec3 right = pos.cross(Vec3::UnitY()).normalized();
+            double elevation = -dy * sensitivity;
+            Eigen::AngleAxisd rotR(elevation, right);
+            pos = rotR * pos;
+            camera_.setPosition(pos);
+        }
+        lastCameraMouseX_ = state.mouseX;
+        lastCameraMouseY_ = state.mouseY;
+    } else {
+        cameraRightDragActive_ = false;
+    }
+
+    // ── WASD pan ──────────────────────────────────────────────────────────────
+    constexpr double kMoveSpeed = 2.0;
+    Vec3 pos = camera_.position();
+    Vec3 forward = (Vec3::Zero() - pos).normalized();
+    Vec3 right    = forward.cross(Vec3::UnitY()).normalized();
+
+    if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) pos += forward * kMoveSpeed * dt;
+    if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) pos -= forward * kMoveSpeed * dt;
+    if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) pos += right   * kMoveSpeed * dt;
+    if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) pos -= right   * kMoveSpeed * dt;
+    camera_.setPosition(pos);
+
+    // ── Scroll zoom ───────────────────────────────────────────────────────────
+    constexpr double kScrollSpeed = 0.5;
+    if (state.scrollY != 0.0) {
+        Vec3 p = camera_.position();
+        Vec3 fwd = (Vec3::Zero() - p).normalized();
+        camera_.setPosition(p + fwd * state.scrollY * kScrollSpeed);
     }
 }
 
@@ -362,6 +491,39 @@ void App::render() {
 
     glUseProgram(0);
 
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    UiActions actions = ui_->draw(
+        solverParams_,
+        renderParams_,
+        defaultMaterial_,
+        gravityLikeForce_,
+        sim_->mergeSplitController());
+
+    if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
+
+    if (actions.applyGravity) {
+        gravityLikeForce_ = actions.gravityForce;
+        if (gravityField_) gravityField_->setForce(gravityLikeForce_);
+    }
+
+    // ── NEW: plane tilt ───────────────────────────────────────────────────────
+    if (actions.tiltPlane && scene_.hasSurface()) {
+        auto* plane = dynamic_cast<PlaneSurface*>(&scene_.surface());
+        if (plane) {
+            plane->setNormal(actions.planeNormal);
+            rebuildPlaneGpuMesh();   // re-uploads the VAO (see below)
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    if (actions.saveScreenshot) screenshotRequested_ = true;
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     const auto end = Clock::now();
     RenderStats stats;
     stats.frameWidth = width_;
@@ -369,6 +531,48 @@ void App::render() {
     stats.renderMs = std::chrono::duration<double, std::milli>(end - start).count();
 
     if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
+}
+
+void App::rebuildPlaneGpuMesh() {
+    auto* plane = dynamic_cast<PlaneSurface*>(&scene_.surface());
+    if (!plane) return;
+
+    const Vec3 n  = plane->normal();
+    const Vec3 o  = plane->origin();
+    const Vec3 tu = plane->tangentU();
+    const Vec3 tv = plane->tangentV();
+    constexpr float ext = 3.0f;
+
+    auto v = [](const Vec3& p) -> std::array<float,3> {
+        return { static_cast<float>(p.x()),
+                 static_cast<float>(p.y()),
+                 static_cast<float>(p.z()) };
+    };
+
+    Vec3 corners[4] = {
+        o - ext*tu - ext*tv,
+        o + ext*tu - ext*tv,
+        o + ext*tu + ext*tv,
+        o - ext*tu + ext*tv,
+    };
+
+    std::array<float, 24> verts;
+    for (int i = 0; i < 4; ++i) {
+        verts[i*6+0] = static_cast<float>(corners[i].x());
+        verts[i*6+1] = static_cast<float>(corners[i].y());
+        verts[i*6+2] = static_cast<float>(corners[i].z());
+        verts[i*6+3] = static_cast<float>(n.x());
+        verts[i*6+4] = static_cast<float>(n.y());
+        verts[i*6+5] = static_cast<float>(n.z());
+    }
+
+    glBindVertexArray(planeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, planeVbo_);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                 verts.data(), GL_DYNAMIC_DRAW);
+    glBindVertexArray(0);
+    // EBO indices {0,1,2,0,2,3} stay the same — no re-upload needed
 }
 
 void App::destroyRenderResources() {
@@ -390,6 +594,10 @@ void App::destroyRenderResources() {
 
 void App::shutdown() {
     destroyRenderResources();
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     logger_.reset();
     ui_.reset();
