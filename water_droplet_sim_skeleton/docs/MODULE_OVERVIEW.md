@@ -355,6 +355,14 @@ Records and saves:
 - Droplet count
 - Total vertex count
 
+## `include/wd/experiments/screenshot_writer.h`
+
+Declares a PNG screenshot helper for saving the current OpenGL framebuffer.
+
+## `src/experiments/screenshot_writer.cpp`
+
+Reads the default framebuffer, flips it into image coordinates, and writes a PNG screenshot.
+
 ---
 
 # App Module

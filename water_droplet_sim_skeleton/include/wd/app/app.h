@@ -3,14 +3,17 @@
 #include "wd/experiments/experiment_logger.h"
 #include "wd/interaction/drag_interactor.h"
 #include "wd/interaction/input_router.h"
-#include "wd/render/droplet_gpu_cache.h"
 #include "wd/render/refractive_renderer.h"
 #include "wd/sim/simulation_system.h"
 #include "wd/ui/ui_controller.h"
+#include <string>
 
 struct GLFWwindow;
 
 namespace wd {
+
+class ConstantForceField;
+class DropletTemplate;
 
 class App {
 public:
@@ -19,18 +22,22 @@ public:
 private:
     bool initializeWindow();
     bool initialize();
+    bool initializeImGui();
     void initializeGlState();
-    bool initializeRenderResources();
-    void initializePlaneMesh();
     void buildDefaultScene();
+    void spawnDropletAt(const Vec3& anchorWorld);
     void restartSimulation();
     void processInput();
+    void updateCameraControls(double dt);
     void update();
     void render();
-    void destroyRenderResources();
+    void saveExperimentCsv() const;
+    void saveScreenshot();
+    void shutdownImGui();
     void shutdown();
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
     GLFWwindow* window_ = nullptr;
     int width_ = 1280;
@@ -42,11 +49,12 @@ private:
     SolverParams solverParams_;
     RenderParams renderParams_;
     MaterialParams defaultMaterial_;
-    Vec3 gravityLikeForce_ = Vec3(0.0, -9.8, 0.0);
+    Vec3 gravityLikeForce_ = Vec3(0.0, 0.0, 0.0);
 
+    std::shared_ptr<ConstantForceField> gravityField_;
     std::shared_ptr<DragForceField> dragField_;
+    std::shared_ptr<const DropletTemplate> dropletTemplate_;
 
-    DropletGpuCache dropletCache_;
     std::unique_ptr<InputRouter> input_;
     std::unique_ptr<DragInteractor> dragInteractor_;
     std::unique_ptr<UiController> ui_;
@@ -54,18 +62,23 @@ private:
     std::unique_ptr<RefractiveRenderer> renderer_;
     std::unique_ptr<ExperimentLogger> logger_;
 
-    unsigned int dropletProgram_ = 0;
-    unsigned int planeProgram_ = 0;
-    unsigned int planeVao_ = 0;
-    unsigned int planeVbo_ = 0;
-    unsigned int planeEbo_ = 0;
-    int planeIndexCount_ = 0;
-
     bool paused_ = false;
     bool pauseKeyWasDown_ = false;
     bool stepKeyWasDown_ = false;
     bool restartKeyWasDown_ = false;
+    bool screenshotKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool simulationAdvancedThisFrame_ = false;
+    bool screenshotRequested_ = false;
+    bool imguiInitialized_ = false;
+    bool cameraRightDragActive_ = false;
+    int nextDropletId_ = 1;
+    int screenshotCounter_ = 1;
+    std::string runName_;
+    double lastCameraMouseX_ = 0.0;
+    double lastCameraMouseY_ = 0.0;
+    double lastFrameTimeSec_ = 0.0;
+    double cameraScrollVelocity_ = 0.0;
 };
 
 } // namespace wd

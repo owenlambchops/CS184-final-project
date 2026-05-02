@@ -34,6 +34,14 @@ public:
     // relevant simulation region of it). Used for culling and broad-phase
     // spatial queries.
     virtual AABB bounds() const = 0;
+
+    virtual SurfaceRenderMesh buildRenderMesh() const = 0;
+
+    virtual const SurfaceMaterialParams& material() const = 0;
+    virtual SurfaceMaterialParams& material() = 0;
+
+    virtual const SurfaceRenderParams& renderParams() const = 0;
+    virtual SurfaceRenderParams& renderParams() = 0;
 };
 
 } // namespace wd

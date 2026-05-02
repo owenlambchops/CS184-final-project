@@ -1,33 +1,97 @@
 #pragma once
 #include "wd/core/scene.h"
 #include "wd/render/droplet_gpu_cache.h"
+#include "wd/render/shader.h"
+#include <glm/fwd.hpp>
 
 namespace wd {
 
 class Camera {
 public:
-    Eigen::Matrix4d view() const { return Eigen::Matrix4d::Identity(); }
-    Eigen::Matrix4d proj(double) const { return Eigen::Matrix4d::Identity(); }
+    glm::mat4 view() const;
+    glm::mat4 proj(double aspect) const;
+
     Vec3 position() const { return position_; }
     void setPosition(const Vec3& p) { position_ = p; }
+    void move(const Vec3& delta) { position_ += delta; }
+
+    Vec3 forward() const;
+    Vec3 right() const;
+    Vec3 up() const;
+    double fovYRad() const;
+
+    void rotate(double yawDeltaRad, double pitchDeltaRad);
+    void lookAt(const Vec3& target);
 
 private:
     Vec3 position_ = Vec3(0.0, 1.0, 3.0);
+    double yawRad_ = 0.0;
+    double pitchRad_ = 0.0;
+    double fovYDeg_ = 45.0;
 };
 
 class RefractiveRenderer {
 public:
-    void initialize(int width, int height);
+    ~RefractiveRenderer();
+
+    bool initialize(int width, int height);
     void resize(int width, int height);
 
     RenderStats render(const Scene& scene, const Camera& camera, const RenderParams& params);
 
 private:
-    void renderSceneColorDepth(const Scene& scene, const Camera& camera);
+    bool initializeBasicResources();
+    void initializeSurfaceMeshBuffers();
+    void syncSurfaceMesh(const ISurface& surface);
+    bool createRenderTargets();
+    bool initializeEnvironmentMap();
+    void releaseEnvironmentMap();
+    void releaseRenderTargets();
+    bool checkFramebufferComplete(const char* name) const;
+    void releaseResources();
+
+    void renderEnvironmentBackground(const Camera& camera);
+    void renderCaustics(const Scene& scene, const RenderParams& params);
+    void renderSceneColorDepth(const Scene& scene, const Camera& camera, const RenderParams& params);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
+    void renderDropletBackDepth(const Scene& scene, const Camera& camera);
     void compositeDroplets(const Scene& scene, const Camera& camera, const RenderParams& params);
 
     DropletGpuCache dropletCache_;
+    Shader supportSurfaceShader_;
+    Shader backgroundShader_;
+    Shader dropletGBufferShader_;
+    Shader compositeShader_;
+    Shader causticSplatShader_;
+    unsigned int surfaceVao_ = 0;
+    unsigned int surfaceVbo_ = 0;
+    unsigned int surfaceEbo_ = 0;
+    unsigned int fullscreenVao_ = 0;
+    unsigned int causticVao_ = 0;
+
+    unsigned int sceneFbo_ = 0;
+    unsigned int sceneColorTex_ = 0;
+    unsigned int sceneDepthTex_ = 0;
+
+    unsigned int dropletFbo_ = 0;
+    unsigned int dropletNormalTex_ = 0;
+    unsigned int dropletDepthTex_ = 0;
+    unsigned int dropletBackDepthFbo_ = 0;
+    unsigned int dropletBackDepthTex_ = 0;
+
+    unsigned int lightDropletFbo_ = 0;
+    unsigned int lightDropletNormalTex_ = 0;
+    unsigned int lightDropletDepthTex_ = 0;
+    unsigned int lightDropletBackDepthFbo_ = 0;
+    unsigned int lightDropletBackDepthTex_ = 0;
+    unsigned int causticFbo_ = 0;
+    unsigned int causticTex_ = 0;
+
+    unsigned int environmentTex_ = 0;
+    Vec3 causticSunDir_ = Vec3::Zero();
+    bool causticSunDirValid_ = false;
+
+    int surfaceIndexCount_ = 0;
     int width_ = 0;
     int height_ = 0;
 };

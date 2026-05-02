@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 #include <limits>
@@ -8,6 +9,9 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <map>
+#include <cmath>
+
 
 namespace wd {
 
@@ -16,6 +20,15 @@ using Vec3 = Eigen::Vector3d;
 using MatX3d = Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using MatX3i = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using SparseMat = Eigen::SparseMatrix<double>;
+using DenseMat = Eigen::MatrixXd;
+using Weights = std::map<int, std::map<int, double>>;
+
+// Stores adjacency data needed for the Loop Subdivision stencil
+struct Edge {
+    int v1 = -1, v2 = -1;
+    int opposite1 = -1, opposite2 = -1;
+    int new_vid = -1; // The index of the newly inserted vertex
+};
 
 struct Ray {
     Vec3 origin = Vec3::Zero();
@@ -44,18 +57,40 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double density = 1.0;
+    double surfaceTension = 4000.0;           // gamma
+    double viscousDamping = 16.0;          // mu
+    double laplacianViscosity = 8.0;      // eta
+    double density = 0.10;
+    double contactStiffness = 3.0;         // alpha
+    double friction = 0.1;
+    bool enableLocalVolumeCorrection = false;
+    bool enableGlobalVolumeCorrection = true;
+    // damping_gain=1.6, # Apply new robust damping
+    double advContactAngleDeg = 89.0;      // theta_adv
+    double recContactAngleDeg = 91.0;      // theta_rec    
+};
 
-    double surfaceTension = 1.0;
-    double friction = 0.15;
-    double viscousDamping = 0.10;
-    double laplacianViscosity = 0.02;
+struct SurfaceMaterialParams {
+    Vec3 solidVelocity = Vec3::Zero();
+    double friction = 0.05;
 
-    double advContactAngleDeg = 95.0;
-    double recContactAngleDeg = 70.0;
+    double advContactAngleDeg = 90.0;
+    double recContactAngleDeg = 30.0;
     double contactStiffness = 0.5;
 
-    double volumeStiffness = 0.8;
+    double adhesionDistance = 0.05;
+};
+
+struct SurfaceRenderParams {
+    double ior = 1.52;
+    double opacity = 0.32;
+    Vec3 tintColor = Vec3(0.78, 0.90, 1.0);
+};
+
+struct SurfaceRenderMesh {
+    MatX3d positions;
+    MatX3d normals;
+    MatX3i faces;
 };
 
 struct SolverParams {
@@ -67,11 +102,34 @@ struct SolverParams {
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
     bool enableContactAngle = true;
-    bool enableVolumeCorrect = false;
-
+    bool enableVolumeCorrect = true;
+    bool enableEdgeLengthRegularizer = false;
+    // TODO(remesh-step2): Add adaptive remesh controls.
+    // bool enableAdaptiveRemesh = false;
+    // double remeshTargetEdgeLength = 0.0;   // 0 => use restMeanEdgeLength
+    // double remeshSplitThreshold = 1.33;
+    // double remeshCollapseThreshold = 0.75;
+    // int remeshMaxOpsPerSubstep = 64;
+    
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.05;
     double maxVelocity = 15.0;
+    double maxInternalAccel = 200.0;
+    double vertexDamping = 0.0;
+
+    double edgeLengthTargetRatio = 1.0;
+    double edgeLengthStiffness = 10.0;
+    double edgeLengthMaxRelSpeed = 2.0;
+};
+
+enum class RenderDebugView : int {
+    Final = 0,
+    SceneColor = 1,
+    EnvironmentMap = 2,
+    SceneDepth = 3,
+    DropletDepth = 4,
+    DropletNormal = 5,
+    Thickness = 6,
 };
 
 struct RenderParams {
@@ -81,8 +139,15 @@ struct RenderParams {
     double fresnelPower = 5.0;
 
     double refractionScale = 0.03;
-    double specularPower = 64.0;
+    double maxThickness = 1.0;
+    double debugDepthRange = 8.0;
+    double absorptionStrength = 1.35;
+    Vec3 absorptionColor = Vec3(0.65, 0.24, 0.10);
     bool enableThickness = true;
+    bool enableCaustics = true;
+    double causticStrength = 0.45;
+    double causticPointSize = 2.0;
+    RenderDebugView debugView = RenderDebugView::Final;
 };
 
 struct SimulationStats {

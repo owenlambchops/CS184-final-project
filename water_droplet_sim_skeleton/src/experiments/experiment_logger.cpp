@@ -25,8 +25,10 @@ void ExperimentLogger::record(double timeSec, const Scene& scene,
     samples_.push_back(s);
 }
 
-void ExperimentLogger::saveCsv(const std::string& path) const {
+bool ExperimentLogger::saveCsv(const std::string& path) const {
     std::ofstream out(path);
+    if (!out) return false;
+
     out << "run,time_sec,sim_ms,render_ms,mean_volume_error,max_volume_error,droplet_count,total_vertex_count\n";
     for (const auto& s : samples_) {
         out << runName_ << ','
@@ -38,6 +40,8 @@ void ExperimentLogger::saveCsv(const std::string& path) const {
             << s.dropletCount << ','
             << s.totalVertexCount << '\n';
     }
+
+    return static_cast<bool>(out);
 }
 
 void ExperimentLogger::clear() {

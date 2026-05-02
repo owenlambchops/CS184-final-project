@@ -5,22 +5,22 @@ namespace wd {
 
 DropletFactory::DropletFactory(std::shared_ptr<const DropletTemplate> tpl) : tpl_(std::move(tpl)) {}
 
-std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, const ISurface& surface) const {
+std::unique_ptr<Droplet> DropletFactory::spawn(int id, const SpawnDesc& desc, const ISurface&) const {
     auto drop = std::make_unique<Droplet>(id, tpl_, desc.material);
-    SurfaceSample s = surface.closestSample(desc.anchorWorld);
 
     auto& X = drop->positions();
     auto& U = drop->velocities();
 
     for (int i = 0; i < X.rows(); ++i) {
         Vec3 local = tpl_->restVertices().row(i).transpose();
-        Vec3 world = s.position + local.x() * s.tangentU + local.y() * s.normal + local.z() * s.tangentV;
+        Vec3 world = desc.anchorWorld + local;
         X.row(i) = world.transpose();
         U.row(i) = desc.initialVelocity.transpose();
     }
 
-    drop->setTargetVolume(desc.targetVolume);
     drop->updateDerived();
+    const double targetVolume = (desc.targetVolume > 0.0) ? desc.targetVolume : drop->derived().currentVolume;
+    drop->setTargetVolume(targetVolume);
     return drop;
 }
 
@@ -46,7 +46,7 @@ std::pair<std::unique_ptr<Droplet>, std::unique_ptr<Droplet>> DropletFactory::sp
     if (src.derived().principalAxis.norm() > 1e-8) {
         axis = src.derived().principalAxis.normalized();
     }
-    double offset = std::max(0.05, 0.35 * src.derived().footprintRadius);
+    double offset = std::max(0.05, src.derived().footprintRadius);
 
     SpawnDesc a;
     a.anchorWorld = src.derived().centerOfMass - offset * axis;

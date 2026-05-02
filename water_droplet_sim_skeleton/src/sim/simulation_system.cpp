@@ -1,4 +1,5 @@
 #include "wd/sim/simulation_system.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -19,20 +20,31 @@ void SimulationSystem::step(Scene& scene) {
 
     mergeSplit_.process(scene.droplets(), scene.surface());
 
-    VolumeCorrector volume;
+    auto& droplets = scene.droplets();
+    droplets.erase(
+        std::remove_if(
+            droplets.begin(),
+            droplets.end(),
+            [](const std::unique_ptr<Droplet>& d) {
+                return d && d->derived().centerOfMass.y() < -5.0;
+            }),
+        droplets.end());
+
+    // VolumeCorrector volume;
     double sumErr = 0.0;
     double maxErr = 0.0;
 
-    for (const auto& d : scene.droplets()) {
-        double v = volume.computeClosedVolume(*d, scene.surface());
+    for (const auto& d : droplets) {
+        // double v = volume.computeClosedVolume(*d, scene.surface());
+        const double v = d->derived().currentVolume;
         double target = std::max(d->targetVolume(), 1e-12);
         double err = std::abs(v - target) / target;
         sumErr += err;
         maxErr = std::max(maxErr, err);
     }
 
-    stats_.dropletCount = static_cast<int>(scene.droplets().size());
-    stats_.meanVolumeError = scene.droplets().empty() ? 0.0 : sumErr / static_cast<double>(scene.droplets().size());
+    stats_.dropletCount = static_cast<int>(droplets.size());
+    stats_.meanVolumeError = droplets.empty() ? 0.0 : sumErr / static_cast<double>(droplets.size());
     stats_.maxVolumeError = maxErr;
 
     timeSec_ += solver_.params().dt;
@@ -40,5 +52,7 @@ void SimulationSystem::step(Scene& scene) {
     auto end = Clock::now();
     stats_.simMs = std::chrono::duration<double, std::milli>(end - start).count();
 }
+
+
 
 } // namespace wd

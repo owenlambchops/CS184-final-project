@@ -5,11 +5,10 @@ layout(location = 1) in vec3 aNormal;
 uniform mat4 uView;
 uniform mat4 uProj;
 
-out vec3 vWorldPos;
-out vec3 vWorldNormal;
+out vec3 vViewNormal;
 
 void main() {
-    vWorldPos = aPosition;
-    vWorldNormal = normalize(aNormal);
-    gl_Position = uProj * uView * vec4(aPosition, 1.0);
+    vec4 viewPos = uView * vec4(aPosition, 1.0);
+    vViewNormal = normalize(mat3(uView) * aNormal);
+    gl_Position = uProj * viewPos;
 }

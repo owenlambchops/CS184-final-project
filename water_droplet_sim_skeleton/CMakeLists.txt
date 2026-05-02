@@ -29,6 +29,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(libigl CONFIG REQUIRED)
+find_path(STB_INCLUDE_DIR NAMES stb_image.h REQUIRED)
 
 add_library(wd_core
     src/core/scene.cpp
@@ -42,6 +43,7 @@ add_library(wd_core
     src/sim/single_droplet_solver.cpp
     src/sim/merge_split_controller.cpp
     src/sim/simulation_system.cpp
+    src/render/shader.cpp
     src/render/gpu_mesh_buffer.cpp
     src/render/droplet_gpu_cache.cpp
     src/render/refractive_renderer.cpp
@@ -50,10 +52,11 @@ add_library(wd_core
     src/interaction/drag_interactor.cpp
     src/ui/ui_controller.cpp
     src/experiments/experiment_logger.cpp
+    src/experiments/screenshot_writer.cpp
     src/app/app.cpp
 )
 
-target_include_directories(wd_core PUBLIC include)
+target_include_directories(wd_core PUBLIC include ${STB_INCLUDE_DIR})
 target_link_libraries(wd_core PUBLIC
     Eigen3::Eigen
     glad::glad
@@ -76,4 +79,10 @@ target_include_directories(wd_skeleton PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 target_link_libraries(wd_skeleton PRIVATE wd_core)
 
-file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
+add_custom_target(copy_runtime_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/assets
+            ${CMAKE_BINARY_DIR}/assets
+    COMMENT "Copying runtime assets"
+)
+add_dependencies(wd_skeleton copy_runtime_assets)
