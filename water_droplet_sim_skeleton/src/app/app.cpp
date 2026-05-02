@@ -188,7 +188,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    dropletTemplate_ = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
+    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(2, 0.20);
     DropletFactory factory(dropletTemplate_);
     MergeSplitController mergeSplit(factory);
     sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
@@ -201,7 +201,7 @@ void App::spawnDropletAt(const Vec3& anchorWorld) {
     SpawnDesc desc;
     desc.anchorWorld = anchorWorld;
     desc.initialVelocity = Vec3::Zero();
-    desc.targetVolume = 0.01;
+    desc.targetVolume = 0.0;
     desc.material = defaultMaterial_;
 
     scene_.droplets().push_back(factory.spawn(nextDropletId_++, desc, scene_.surface()));

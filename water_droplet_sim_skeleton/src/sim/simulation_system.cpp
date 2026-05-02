@@ -19,12 +19,13 @@ void SimulationSystem::step(Scene& scene) {
 
     mergeSplit_.process(scene.droplets(), scene.surface());
 
-    VolumeCorrector volume;
+    // VolumeCorrector volume;
     double sumErr = 0.0;
     double maxErr = 0.0;
 
     for (const auto& d : scene.droplets()) {
-        double v = volume.computeClosedVolume(*d, scene.surface());
+        // double v = volume.computeClosedVolume(*d, scene.surface());
+        const double v = d->derived().currentVolume;
         double target = std::max(d->targetVolume(), 1e-12);
         double err = std::abs(v - target) / target;
         sumErr += err;
@@ -40,5 +41,7 @@ void SimulationSystem::step(Scene& scene) {
     auto end = Clock::now();
     stats_.simMs = std::chrono::duration<double, std::milli>(end - start).count();
 }
+
+
 
 } // namespace wd
