@@ -175,6 +175,7 @@ RenderStats RefractiveRenderer::render(const Scene& scene, const Camera& camera,
 
         renderSceneColorDepth(scene, camera);
         renderDropletGBuffer(scene, camera);
+        renderDropletBackDepth(scene, camera);
         compositeDroplets(scene, camera, params);
     }
 
@@ -378,19 +379,6 @@ bool RefractiveRenderer::createRenderTargets() {
                            dropletNormalTex_,
                            0);
 
-    glGenTextures(1, &dropletThicknessTex_);
-    configureColorTexture(dropletThicknessTex_,
-                          targetWidth,
-                          targetHeight,
-                          GL_RGBA16F,
-                          GL_RGBA,
-                          GL_FLOAT);
-    glFramebufferTexture2D(GL_FRAMEBUFFER,
-                           GL_COLOR_ATTACHMENT1,
-                           GL_TEXTURE_2D,
-                           dropletThicknessTex_,
-                           0);
-
     glGenTextures(1, &dropletDepthTex_);
     configureDepthTexture(dropletDepthTex_, targetWidth, targetHeight);
     glFramebufferTexture2D(GL_FRAMEBUFFER,
@@ -399,12 +387,27 @@ bool RefractiveRenderer::createRenderTargets() {
                            dropletDepthTex_,
                            0);
 
-    const std::array<unsigned int, 2> dropletDrawBuffers = {
-        GL_COLOR_ATTACHMENT0,
-        GL_COLOR_ATTACHMENT1,
-    };
+    const std::array<unsigned int, 1> dropletDrawBuffers = {GL_COLOR_ATTACHMENT0};
     glDrawBuffers(static_cast<int>(dropletDrawBuffers.size()), dropletDrawBuffers.data());
     if (!checkFramebufferComplete("dropletFbo")) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        releaseRenderTargets();
+        return false;
+    }
+
+    glGenFramebuffers(1, &dropletBackDepthFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, dropletBackDepthFbo_);
+
+    glGenTextures(1, &dropletBackDepthTex_);
+    configureDepthTexture(dropletBackDepthTex_, targetWidth, targetHeight);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_DEPTH_ATTACHMENT,
+                           GL_TEXTURE_2D,
+                           dropletBackDepthTex_,
+                           0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (!checkFramebufferComplete("dropletBackDepthFbo")) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         releaseRenderTargets();
         return false;
@@ -415,8 +418,9 @@ bool RefractiveRenderer::createRenderTargets() {
 }
 
 void RefractiveRenderer::releaseRenderTargets() {
+    if (dropletBackDepthTex_ != 0) glDeleteTextures(1, &dropletBackDepthTex_);
+    if (dropletBackDepthFbo_ != 0) glDeleteFramebuffers(1, &dropletBackDepthFbo_);
     if (dropletDepthTex_ != 0) glDeleteTextures(1, &dropletDepthTex_);
-    if (dropletThicknessTex_ != 0) glDeleteTextures(1, &dropletThicknessTex_);
     if (dropletNormalTex_ != 0) glDeleteTextures(1, &dropletNormalTex_);
     if (dropletFbo_ != 0) glDeleteFramebuffers(1, &dropletFbo_);
 
@@ -425,9 +429,10 @@ void RefractiveRenderer::releaseRenderTargets() {
     if (sceneFbo_ != 0) glDeleteFramebuffers(1, &sceneFbo_);
 
     dropletDepthTex_ = 0;
-    dropletThicknessTex_ = 0;
     dropletNormalTex_ = 0;
     dropletFbo_ = 0;
+    dropletBackDepthTex_ = 0;
+    dropletBackDepthFbo_ = 0;
 
     sceneDepthTex_ = 0;
     sceneColorTex_ = 0;
@@ -543,10 +548,8 @@ void RefractiveRenderer::renderDropletGBuffer(const Scene& scene, const Camera& 
     glDisable(GL_BLEND);
 
     const std::array<float, 4> normalClear = {0.5f, 0.5f, 1.0f, 0.0f};
-    const std::array<float, 4> thicknessClear = {0.0f, 0.0f, 0.0f, 0.0f};
     constexpr float depthClear = 1.0f;
     glClearBufferfv(GL_COLOR, 0, normalClear.data());
-    glClearBufferfv(GL_COLOR, 1, thicknessClear.data());
     glClearBufferfv(GL_DEPTH, 0, &depthClear);
 
     const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
@@ -561,6 +564,40 @@ void RefractiveRenderer::renderDropletGBuffer(const Scene& scene, const Camera& 
         }
     }
 
+    glUseProgram(0);
+}
+
+void RefractiveRenderer::renderDropletBackDepth(const Scene& scene, const Camera& camera) {
+    glBindFramebuffer(GL_FRAMEBUFFER, dropletBackDepthFbo_);
+    glViewport(0, 0, std::max(width_, 1), std::max(height_, 1));
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
+    constexpr float depthClear = 1.0f;
+    glClearBufferfv(GL_DEPTH, 0, &depthClear);
+
+    const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+    GLint previousCullFace = GL_BACK;
+    glGetIntegerv(GL_CULL_FACE_MODE, &previousCullFace);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+
+    const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
+
+    if (dropletGBufferShader_.id() != 0) {
+        dropletGBufferShader_.use();
+        dropletGBufferShader_.setMat4("uView", matrices.view);
+        dropletGBufferShader_.setMat4("uProj", matrices.proj);
+
+        for (const auto& droplet : scene.droplets()) {
+            dropletCache_.drawDroplet(droplet->id());
+        }
+    }
+
+    glCullFace(static_cast<unsigned int>(previousCullFace));
+    if (!cullWasEnabled) glDisable(GL_CULL_FACE);
     glUseProgram(0);
 }
 
@@ -579,6 +616,7 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         compositeShader_.setInt("uEnvironmentMap", 2);
         compositeShader_.setInt("uSceneDepth", 3);
         compositeShader_.setInt("uDropletDepth", 4);
+        compositeShader_.setInt("uDropletBackDepth", 5);
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
         compositeShader_.setInt("uDebugView", static_cast<int>(params.debugView));
         compositeShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
@@ -605,11 +643,15 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         glBindTexture(GL_TEXTURE_2D, sceneDepthTex_);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, dropletDepthTex_);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, dropletBackDepthTex_);
 
         glBindVertexArray(fullscreenVao_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE3);

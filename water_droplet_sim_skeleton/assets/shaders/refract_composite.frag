@@ -7,6 +7,7 @@ uniform sampler2D uDropletNormal;
 uniform sampler2D uEnvironmentMap;
 uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
+uniform sampler2D uDropletBackDepth;
 uniform mat4 uInvProj;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
@@ -51,15 +52,15 @@ float linearizeDepth(float depth) {
 }
 
 float estimateThickness() {
-    float sceneDepth = texture(uSceneDepth, vUv).r;
-    float dropletDepth = texture(uDropletDepth, vUv).r;
-    if (sceneDepth >= 0.9999 || dropletDepth >= 0.9999) {
+    float frontDepth = texture(uDropletDepth, vUv).r;
+    float backDepth = texture(uDropletBackDepth, vUv).r;
+    if (frontDepth >= 0.9999 || backDepth >= 0.9999) {
         return 0.0;
     }
 
-    float sceneLinear = linearizeDepth(sceneDepth);
-    float dropletLinear = linearizeDepth(dropletDepth);
-    return clamp(sceneLinear - dropletLinear, 0.0, uMaxThickness);
+    float frontLinear = linearizeDepth(frontDepth);
+    float backLinear = linearizeDepth(backDepth);
+    return clamp(backLinear - frontLinear, 0.0, uMaxThickness);
 }
 
 float visualizeSceneDepth(float depth) {

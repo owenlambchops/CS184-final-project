@@ -53,6 +53,7 @@ private:
     void renderEnvironmentBackground(const Camera& camera);
     void renderSceneColorDepth(const Scene& scene, const Camera& camera);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
+    void renderDropletBackDepth(const Scene& scene, const Camera& camera);
     void compositeDroplets(const Scene& scene, const Camera& camera, const RenderParams& params);
 
     DropletGpuCache dropletCache_;
@@ -71,8 +72,9 @@ private:
 
     unsigned int dropletFbo_ = 0;
     unsigned int dropletNormalTex_ = 0;
-    unsigned int dropletThicknessTex_ = 0;
     unsigned int dropletDepthTex_ = 0;
+    unsigned int dropletBackDepthFbo_ = 0;
+    unsigned int dropletBackDepthTex_ = 0;
 
     unsigned int environmentTex_ = 0;
 
