@@ -8,6 +8,7 @@ uniform sampler2D uEnvironmentMap;
 uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
 uniform sampler2D uDropletBackDepth;
+uniform sampler2D uCausticMap;
 uniform mat4 uInvProj;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
@@ -33,6 +34,7 @@ const int kDebugDropletDepth = 4;
 const int kDebugDropletNormal = 5;
 const int kDebugThickness = 6;
 const int kDebugWireframe = 7;
+const int kDebugCaustics = 7;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
@@ -133,6 +135,12 @@ void main() {
         float wire = wireframeFromDropletDepth();
         vec3 edgeColor = vec3(0.15, 0.95, 0.85);
         FragColor = vec4(wire * edgeColor, 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugCaustics) {
+        float caustic = texture(uCausticMap, vUv).r;
+        FragColor = vec4(vec3(caustic), 1.0);
         return;
     }
 
