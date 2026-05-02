@@ -103,7 +103,7 @@ constexpr std::array<float, 24> kPlaneVertices = {
 
 constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
 
-const glm::vec3 kLightDir = glm::normalize(glm::vec3(0.4f, 0.8f, 0.2f));
+const glm::vec3 kWorldUp(0.0f, 1.0f, 0.0f);
 
 void setMat4(unsigned int program, const char* name, const glm::mat4& value) {
     const int location = glGetUniformLocation(program, name);
@@ -329,10 +329,16 @@ void App::render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const glm::vec3 eye = toGlm(camera_.position());
-    const glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::vec3 target(0.0f, 0.0f, 0.0f);
+    const glm::vec3 forward = glm::normalize(target - eye);
+    const glm::vec3 right = glm::normalize(glm::cross(forward, kWorldUp));
+    const glm::mat4 view = glm::lookAt(eye, target, kWorldUp);
     const float aspect = height_ > 0 ? static_cast<float>(width_) / static_cast<float>(height_) : 1.0f;
     const glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
     const glm::mat4 model(1.0f);
+    const float sideOffset = 1.0f;
+    const glm::vec3 lightPos = eye + sideOffset * right;
+    const glm::vec3 lightDir = glm::normalize(target - lightPos);
 
     if (planeProgram_ != 0 && planeVao_ != 0) {
         glUseProgram(planeProgram_);
@@ -352,7 +358,7 @@ void App::render() {
         setMat4(dropletProgram_, "uModel", model);
         setMat4(dropletProgram_, "uView", view);
         setMat4(dropletProgram_, "uProj", proj);
-        setVec3(dropletProgram_, "uLightDir", kLightDir);
+        setVec3(dropletProgram_, "uLightDir", lightDir);
         setVec3(dropletProgram_, "uViewPos", eye);
 
         for (const auto& droplet : scene_.droplets()) {
