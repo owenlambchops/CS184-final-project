@@ -42,6 +42,7 @@ docs/
 ## `CMakeLists.txt`
 
 Defines the C++20 project, builds the `wd_core` library, and builds the minimal executable `wd_skeleton`.
+It also copies runtime assets into the build directory during `cmake --build`, so shader and HDRI edits are available when running from `build/`.
 
 ---
 
@@ -271,7 +272,7 @@ Declares a GPU mesh buffer wrapper for one droplet.
 
 ## `src/render/gpu_mesh_buffer.cpp`
 
-Stub implementation. Add VAO/VBO/EBO creation, vertex uploads, and draw calls here.
+Implements VAO/VBO/EBO ownership for one droplet mesh, uploads positions and normals, and issues indexed draw calls.
 
 ## `include/wd/render/droplet_gpu_cache.h`
 
@@ -283,17 +284,19 @@ Creates, updates, and removes droplet GPU buffers based on the current droplet l
 
 ## `include/wd/render/refractive_renderer.h`
 
-Declares the top-level renderer and a minimal `Camera` placeholder.
+Declares the top-level renderer, camera helper, shader programs, VAOs, and framebuffer/texture resources used by the refractive render pipeline.
 
-Planned passes:
+Current passes:
 
-1. Scene color/depth pass
-2. Droplet normal/depth/thickness pass
-3. Refractive composite pass
+1. Scene color/depth pass for HDRI background and support surface.
+2. Droplet front normal/depth pass.
+3. Droplet back-depth pass for closed-mesh thickness.
+4. HDRI-sun caustic pass that projects refracted photon splats onto the finite plane.
+5. Full-screen composite pass for refraction, Fresnel reflection, thickness absorption, and debug views.
 
 ## `src/render/refractive_renderer.cpp`
 
-Stub implementation of the three-pass renderer.
+Implements the render pipeline. It loads the HDRI environment, extracts the brightest HDRI texel as the caustic sun direction, creates all offscreen render targets, renders front/back droplet depth, computes the caustic map, and composites the final frame.
 
 ---
 
@@ -335,7 +338,7 @@ Declares the UI controller.
 
 ## `src/ui/ui_controller.cpp`
 
-ImGui stub. Add sliders for solver, material, render, and merge/split parameters here.
+ImGui controls for spawning droplets, applying gravity, selecting render debug views, tuning water rendering parameters, editing finite-plane size, and adjusting support-surface material/contact-line parameters.
 
 ---
 
@@ -385,17 +388,25 @@ Executable entry point.
 
 # Shader Files
 
-## `assets/shaders/scene.vert` and `assets/shaders/scene.frag`
+## `assets/shaders/support_surface.vert` and `assets/shaders/support_surface.frag`
 
-Placeholders for drawing the support surface and background.
+Render the finite support surface with environment lighting, Fresnel-style glass response, tint/opacity controls, and projected caustic highlights.
+
+## `assets/shaders/hdr_background.vert` and `assets/shaders/hdr_background.frag`
+
+Draw the equirectangular HDRI environment background.
 
 ## `assets/shaders/droplet_gbuffer.vert` and `assets/shaders/droplet_gbuffer.frag`
 
-Placeholders for outputting droplet normal, depth, and thickness buffers.
+Render droplet mesh normals into the front g-buffer. Depth is stored in the framebuffer depth attachment; a separate back-depth pass is used to estimate closed-mesh thickness.
 
 ## `assets/shaders/refract_composite.vert` and `assets/shaders/refract_composite.frag`
 
-Placeholders for full-screen refractive composition.
+Full-screen refractive composition. It samples scene color/depth, droplet normal/front depth, droplet back depth, environment map, and caustic map to produce final water rendering and debug views.
+
+## `assets/shaders/caustic_splat.vert` and `assets/shaders/caustic_splat.frag`
+
+Generate an image-space caustic map from the HDRI sun direction. The vertex shader reconstructs light-view droplet front/back positions, refracts rays through the front surface, intersects them with the finite plane, and splats additive photon energy into the caustic texture.
 
 ---
 
