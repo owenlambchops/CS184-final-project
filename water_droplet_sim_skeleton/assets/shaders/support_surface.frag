@@ -4,10 +4,16 @@ in vec3 vWorldNormal;
 out vec4 FragColor;
 
 uniform sampler2D uEnvironmentMap;
+uniform sampler2D uCausticMap;
 uniform vec3 uCameraPos;
 uniform float uIor;
 uniform float uOpacity;
 uniform vec3 uTintColor;
+uniform int uEnableCaustics;
+uniform vec3 uPlaneOrigin;
+uniform vec3 uPlaneTangentU;
+uniform vec3 uPlaneTangentV;
+uniform float uPlaneSideLength;
 
 const float kPi = 3.14159265359;
 
@@ -36,5 +42,13 @@ void main() {
 
     vec3 tintedTransmission = uTintColor * mix(vec3(0.55), envAmbient, 0.45);
     vec3 color = mix(tintedTransmission, reflected, clamp(fresnel, 0.0, 1.0));
+    if (uEnableCaustics != 0 && uPlaneSideLength > 0.0) {
+        vec3 local = vWorldPosition - uPlaneOrigin;
+        vec2 causticUv = vec2(dot(local, uPlaneTangentU), dot(local, uPlaneTangentV)) / uPlaneSideLength + vec2(0.5);
+        if (all(greaterThanEqual(causticUv, vec2(0.0))) && all(lessThanEqual(causticUv, vec2(1.0)))) {
+            float caustic = texture(uCausticMap, causticUv).r;
+            color += caustic * vec3(1.0, 0.94, 0.72);
+        }
+    }
     FragColor = vec4(color, clamp(uOpacity, 0.0, 1.0));
 }

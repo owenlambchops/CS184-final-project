@@ -51,7 +51,8 @@ private:
     void releaseResources();
 
     void renderEnvironmentBackground(const Camera& camera);
-    void renderSceneColorDepth(const Scene& scene, const Camera& camera);
+    void renderCaustics(const Scene& scene, const RenderParams& params);
+    void renderSceneColorDepth(const Scene& scene, const Camera& camera, const RenderParams& params);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
     void renderDropletBackDepth(const Scene& scene, const Camera& camera);
     void compositeDroplets(const Scene& scene, const Camera& camera, const RenderParams& params);
@@ -61,10 +62,12 @@ private:
     Shader backgroundShader_;
     Shader dropletGBufferShader_;
     Shader compositeShader_;
+    Shader causticSplatShader_;
     unsigned int surfaceVao_ = 0;
     unsigned int surfaceVbo_ = 0;
     unsigned int surfaceEbo_ = 0;
     unsigned int fullscreenVao_ = 0;
+    unsigned int causticVao_ = 0;
 
     unsigned int sceneFbo_ = 0;
     unsigned int sceneColorTex_ = 0;
@@ -76,7 +79,17 @@ private:
     unsigned int dropletBackDepthFbo_ = 0;
     unsigned int dropletBackDepthTex_ = 0;
 
+    unsigned int lightDropletFbo_ = 0;
+    unsigned int lightDropletNormalTex_ = 0;
+    unsigned int lightDropletDepthTex_ = 0;
+    unsigned int lightDropletBackDepthFbo_ = 0;
+    unsigned int lightDropletBackDepthTex_ = 0;
+    unsigned int causticFbo_ = 0;
+    unsigned int causticTex_ = 0;
+
     unsigned int environmentTex_ = 0;
+    Vec3 causticSunDir_ = Vec3::Zero();
+    bool causticSunDirValid_ = false;
 
     int surfaceIndexCount_ = 0;
     int width_ = 0;

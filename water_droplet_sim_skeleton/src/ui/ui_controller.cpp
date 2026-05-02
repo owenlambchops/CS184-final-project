@@ -77,6 +77,13 @@ UiActions UiController::draw(SolverParams&,
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Opacity", ImGuiDataType_Double, &surfaceRender.opacity, 0.01f, nullptr, nullptr, "%.3f");
     surfaceRender.opacity = std::clamp(surfaceRender.opacity, 0.0, 1.0);
+    ImGui::Checkbox("Enable Caustics", &renderParams.enableCaustics);
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    ImGui::DragScalar("Caustic Strength", ImGuiDataType_Double, &renderParams.causticStrength, 0.01f, nullptr, nullptr, "%.3f");
+    renderParams.causticStrength = std::max(renderParams.causticStrength, 0.0);
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    ImGui::DragScalar("Caustic Point Size", ImGuiDataType_Double, &renderParams.causticPointSize, 0.05f, nullptr, nullptr, "%.3f");
+    renderParams.causticPointSize = std::max(renderParams.causticPointSize, 0.1);
 
     float tint[3] = {
         static_cast<float>(surfaceRender.tintColor.x()),

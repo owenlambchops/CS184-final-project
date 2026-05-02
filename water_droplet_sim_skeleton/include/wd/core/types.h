@@ -144,6 +144,9 @@ struct RenderParams {
     double absorptionStrength = 1.35;
     Vec3 absorptionColor = Vec3(0.65, 0.24, 0.10);
     bool enableThickness = true;
+    bool enableCaustics = true;
+    double causticStrength = 0.45;
+    double causticPointSize = 2.0;
     RenderDebugView debugView = RenderDebugView::Final;
 };
 
