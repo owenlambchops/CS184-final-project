@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include <numbers>
+#include <set>
 #include <vector>
 
 namespace wd {
@@ -19,6 +20,28 @@ int64_t getEdgeKey(int i1, int i2) {
     const int64_t lo = std::min(i1, i2);
     const int64_t hi = std::max(i1, i2);
     return (lo << 32) | hi;
+}
+
+std::vector<Eigen::Vector2i> buildUniqueEdges(const MatX3i& faces) {
+    std::set<std::pair<int, int>> edgeSet;
+    auto add = [&](int a, int b) {
+        if (a > b) std::swap(a, b);
+        edgeSet.emplace(a, b);
+    };
+
+    for (int i = 0; i < faces.rows(); ++i) {
+        const int a = faces(i, 0);
+        const int b = faces(i, 1);
+        const int c = faces(i, 2);
+        add(a, b);
+        add(b, c);
+        add(c, a);
+    }
+
+    std::vector<Eigen::Vector2i> edges;
+    edges.reserve(edgeSet.size());
+    for (const auto& e : edgeSet) edges.emplace_back(e.first, e.second);
+    return edges;
 }
 
 void addEdgeOpposite(std::map<int64_t, Edge>& edges, int v1, int v2, int opposite) {
@@ -150,6 +173,7 @@ std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalMesh(int subdiv
     auto tpl = std::shared_ptr<DropletTemplate>(new DropletTemplate());
     tpl->restV_ = V;
     tpl->F_ = F.topRows(faceCount);
+    tpl->E_ = buildUniqueEdges(tpl->F_);
     tpl->boundaryLoop_.clear();
     return tpl;
 }

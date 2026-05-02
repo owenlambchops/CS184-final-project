@@ -34,13 +34,19 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
 
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
         if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
-        
+
+
         // Volume correction must run on the live droplet state.
         // This preserves local-first/global-second logic in VolumeCorrector::apply:
         // local velocity correction uses current U, then global position correction updates X.
         if (params_.enableVolumeCorrect) {
             drop.updateDerived();
             volume_.apply(drop, surface, dt);
+        }
+        if (params_.enableEdgeLengthRegularizer) {
+            drop.updateDerived();
+            edgeRegularizer_.apply(
+                drop, dt, params_.edgeLengthTargetRatio, params_.edgeLengthStiffness, params_.edgeLengthMaxRelSpeed);
         }
 
         drop.updateDerived();

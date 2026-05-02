@@ -116,6 +116,11 @@ void setVec3(unsigned int program, const char* name, const glm::vec3& value) {
     if (location >= 0) glUniform3fv(location, 1, glm::value_ptr(value));
 }
 
+void setInt(unsigned int program, const char* name, int value) {
+    const int location = glGetUniformLocation(program, name);
+    if (location >= 0) glUniform1i(location, value);
+}
+
 } // namespace
 
 int App::run() {
@@ -252,7 +257,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    auto tpl = DropletTemplate::CreateSphericalMesh(4, 0.20);
+    auto tpl = DropletTemplate::CreateSphericalMesh(3, 0.20);
     DropletFactory factory(tpl);
 
     SpawnDesc desc;
@@ -308,6 +313,13 @@ void App::processInput() {
         glPolygonMode(GL_FRONT_AND_BACK, wireframe_ ? GL_LINE : GL_FILL);
     }
     wireframeKeyWasDown_ = wireframeKeyDown;
+
+    const bool colorModeKeyDown = glfwGetKey(window_, GLFW_KEY_C) == GLFW_PRESS;
+    if (colorModeKeyDown && !colorModeKeyWasDown_) {
+        const int next = (static_cast<int>(debugColorMode_) + 1) % 4;
+        debugColorMode_ = static_cast<DebugColorMode>(next);
+    }
+    colorModeKeyWasDown_ = colorModeKeyDown;
 
     // Runtime tuning controls:
     // Up/Down: choose parameter
@@ -398,13 +410,15 @@ void App::updateHudTitle() {
         ss << " | fpR=" << d.derived().footprintRadius;
         ss << " | elong=" << d.derived().elongationRatio;
         ss << " | |u|mean/max=" << speedMean << "/" << speedMax;
-        ss << " | gamma=" << d.material().surfaceTension;
-        ss << " mu=" << d.material().viscousDamping;
-        ss << " eta=" << d.material().laplacianViscosity;
-        ss << " rho=" << d.material().density;
+        ss << " | edge(min/mean/max)="
+           << d.derived().minEdgeLength << "/"
+           << d.derived().meanEdgeLength << "/"
+           << d.derived().maxEdgeLength;
     }
 
+    static const char* kColorNames[] = {"base", "edge", "speed", "curvature"};
     static const char* kNames[] = {"gamma", "kv", "mu", "eta", "rho", "alpha", "fric"};
+    ss << " | color[" << kColorNames[std::clamp(static_cast<int>(debugColorMode_), 0, 3)] << "] C cycle";
     ss << " | tune[" << kNames[std::clamp(tuneIndex_, 0, 6)] << "] Up/Down select Left/Right edit W wire";
 
     glfwSetWindowTitle(window_, ss.str().c_str());
@@ -441,6 +455,7 @@ void App::render() {
     }
 
     if (dropletProgram_ != 0) {
+        dropletCache_.setDebugColorMode(debugColorMode_);
         dropletCache_.sync(scene_.droplets());
 
         glUseProgram(dropletProgram_);
@@ -449,6 +464,7 @@ void App::render() {
         setMat4(dropletProgram_, "uProj", proj);
         setVec3(dropletProgram_, "uLightDir", lightDir);
         setVec3(dropletProgram_, "uViewPos", eye);
+        setInt(dropletProgram_, "uDebugColorMode", static_cast<int>(debugColorMode_));
 
         for (const auto& droplet : scene_.droplets()) {
             dropletCache_.drawDroplet(droplet->id());

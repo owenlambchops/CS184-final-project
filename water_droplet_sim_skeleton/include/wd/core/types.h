@@ -57,12 +57,14 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 4000.0;           // gamma
-    double viscousDamping = 8.0;          // mu
-    double laplacianViscosity = 16.0;      // eta
+    double surfaceTension = 2000.0;           // gamma
+    double viscousDamping = 0.50;          // mu
+    double laplacianViscosity = 0.1;      // eta
     double density = 1.0;
     double contactStiffness = 3.0;         // alpha
-    double friction = 0.2;
+    double friction = 0.1;
+    bool enableLocalVolumeCorrection = false;
+    bool enableGlobalVolumeCorrection = true;
     // damping_gain=1.6, # Apply new robust damping
     double advContactAngleDeg = 89.0;      // theta_adv
     double recContactAngleDeg = 91.0;      // theta_rec    
@@ -78,12 +80,16 @@ struct SolverParams {
     bool enableCurvatureFlow = true;
     bool enableContactAngle = true;
     bool enableVolumeCorrect = true;
-
+    bool enableEdgeLengthRegularizer = false;
+    
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.05;
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
     double vertexDamping = 0.0;
+    double edgeLengthTargetRatio = 1.0;
+    double edgeLengthStiffness = 6.0;
+    double edgeLengthMaxRelSpeed = 2.0;
 };
 
 struct RenderParams {
@@ -108,19 +114,6 @@ struct RenderStats {
     double renderMs = 0.0;
     int frameWidth = 0;
     int frameHeight = 0;
-};
-
-// Helper to extract geometry data from the Eigen matrices
-struct SimState {
-    MatX3d x; // Positions
-    MatX3d v; // Velocities
-    MatX3d a; // Accelerations
-    MatX3i faces;
-    std::vector<std::vector<int>> neighbours;
-    Weights w;
-    MatX3d normals;
-    double volume;
-    double rest_volume;
 };
 
 } // namespace wd

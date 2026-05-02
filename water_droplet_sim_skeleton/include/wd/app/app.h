@@ -76,6 +76,8 @@ private:
     bool tuneSelectUpWasDown_ = false;
     bool tuneSelectDownWasDown_ = false;
     int tuneIndex_ = 0;
+    DebugColorMode debugColorMode_ = DebugColorMode::EdgeLength;
+    bool colorModeKeyWasDown_ = false;
 };
 
 } // namespace wd

@@ -36,4 +36,9 @@ public:
     void apply(Droplet& drop, const ISurface& surface, double dt) const;
 };
 
+class EdgeLengthRegularizer {
+public:
+    void apply(Droplet& drop, double dt, double targetRatio, double stiffness, double maxRelativeSpeed) const;
+};
+
 } // namespace wd
