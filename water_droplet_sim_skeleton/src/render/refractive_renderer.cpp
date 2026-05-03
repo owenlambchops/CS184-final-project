@@ -976,6 +976,7 @@ void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& cam
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
         compositeShader_.setInt("uDebugView", static_cast<int>(params.debugView));
         compositeShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
+        compositeShader_.setMat4("uInvView", glm::inverse(matrices.view));
         compositeShader_.setMat3("uInvViewRot", inverseViewRotation(matrices.view));
         compositeShader_.setFloat("uIor", static_cast<float>(params.ior));
         compositeShader_.setFloat("uNearPlane", kCameraNearPlane);
@@ -988,6 +989,16 @@ void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& cam
         compositeShader_.setFloat("uDebugDepthRange", static_cast<float>(params.debugDepthRange));
         compositeShader_.setFloat("uAbsorptionStrength", static_cast<float>(params.absorptionStrength));
         compositeShader_.setVec3("uAbsorptionColor", toGlm(params.absorptionColor));
+
+        const auto* plane = scene.hasSurface() ? dynamic_cast<const PlaneSurface*>(&scene.surface()) : nullptr;
+        if (plane != nullptr) {
+            compositeShader_.setVec3("uPlaneOrigin", toGlm(plane->origin()));
+            compositeShader_.setVec3("uPlaneTangentU", toGlm(plane->tangentU()));
+            compositeShader_.setVec3("uPlaneTangentV", toGlm(plane->tangentV()));
+            compositeShader_.setFloat("uPlaneSideLength", static_cast<float>(plane->sideLength()));
+        } else {
+            compositeShader_.setFloat("uPlaneSideLength", 0.0f);
+        }
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sceneColorTex_);

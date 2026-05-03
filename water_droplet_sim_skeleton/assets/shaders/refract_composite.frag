@@ -10,6 +10,7 @@ uniform sampler2D uDropletDepth;
 uniform sampler2D uDropletBackDepth;
 uniform sampler2D uCausticMap;
 uniform mat4 uInvProj;
+uniform mat4 uInvView;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
 uniform int uDebugView;
@@ -24,6 +25,10 @@ uniform float uMaxThickness;
 uniform float uDebugDepthRange;
 uniform float uAbsorptionStrength;
 uniform vec3 uAbsorptionColor;
+uniform vec3 uPlaneOrigin;
+uniform vec3 uPlaneTangentU;
+uniform vec3 uPlaneTangentV;
+uniform float uPlaneSideLength;
 
 const float kPi = 3.14159265359;
 const int kDebugFinal = 0;
@@ -52,6 +57,15 @@ float linearizeDepth(float depth) {
     float z = depth * 2.0 - 1.0;
     return (2.0 * uNearPlane * uFarPlane) /
            (uFarPlane + uNearPlane - z * (uFarPlane - uNearPlane));
+}
+
+vec3 reconstructWorldPosition(vec2 uv, float depth) {
+    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 view = uInvProj * clip;
+    if (abs(view.w) > 1e-6) {
+        view /= view.w;
+    }
+    return (uInvView * view).xyz;
 }
 
 float estimateThickness() {
@@ -139,7 +153,22 @@ void main() {
     }
 
     if (uDebugView == kDebugCaustics) {
-        float caustic = texture(uCausticMap, vUv).r;
+        float sceneDepth = texture(uSceneDepth, vUv).r;
+        if (sceneDepth >= 0.9999 || uPlaneSideLength <= 0.0) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        vec3 worldPosition = reconstructWorldPosition(vUv, sceneDepth);
+        vec3 local = worldPosition - uPlaneOrigin;
+        vec2 causticUv = vec2(dot(local, uPlaneTangentU), dot(local, uPlaneTangentV)) /
+                          uPlaneSideLength + vec2(0.5);
+        if (any(lessThan(causticUv, vec2(0.0))) || any(greaterThan(causticUv, vec2(1.0)))) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        float caustic = texture(uCausticMap, causticUv).r;
         FragColor = vec4(vec3(caustic), 1.0);
         return;
     }
