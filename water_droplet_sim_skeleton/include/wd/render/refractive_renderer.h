@@ -61,6 +61,7 @@ private:
     Shader supportSurfaceShader_;
     Shader backgroundShader_;
     Shader dropletGBufferShader_;
+    Shader dropletWireframeShader_;
     Shader compositeShader_;
     Shader causticSplatShader_;
     unsigned int surfaceVao_ = 0;
