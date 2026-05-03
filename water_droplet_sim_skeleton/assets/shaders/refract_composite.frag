@@ -32,6 +32,7 @@ const int kDebugSceneDepth = 3;
 const int kDebugDropletDepth = 4;
 const int kDebugDropletNormal = 5;
 const int kDebugThickness = 6;
+const int kDebugWireframe = 7;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
@@ -77,6 +78,22 @@ float visualizeDropletDepth(float depth) {
     return 1.0 - clamp(linearizeDepth(depth) / uDebugDepthRange, 0.0, 1.0);
 }
 
+float wireframeFromDropletDepth() {
+    vec2 texel = vec2(1.0) / vec2(textureSize(uDropletDepth, 0));
+    float dC = texture(uDropletDepth, vUv).r;
+    if (dC >= 0.9999) return 0.0;
+
+    float dL = texture(uDropletDepth, vUv + vec2(-texel.x, 0.0)).r;
+    float dR = texture(uDropletDepth, vUv + vec2( texel.x, 0.0)).r;
+    float dU = texture(uDropletDepth, vUv + vec2(0.0, -texel.y)).r;
+    float dD = texture(uDropletDepth, vUv + vec2(0.0,  texel.y)).r;
+
+    float gx = abs(dR - dL);
+    float gy = abs(dD - dU);
+    float edge = gx + gy;
+    return smoothstep(0.0008, 0.004, edge);
+}
+
 void main() {
     vec3 scene = texture(uSceneColor, vUv).rgb;
     vec2 ndc = vUv * 2.0 - 1.0;
@@ -110,6 +127,11 @@ void main() {
     if (uDebugView == kDebugThickness) {
         float thickness = estimateThickness();
         FragColor = vec4(vec3(thickness), 1.0);
+        return;
+    }
+    if (uDebugView == kDebugWireframe) {
+        float wire = wireframeFromDropletDepth();
+        FragColor = vec4(vec3(wire), 1.0);
         return;
     }
 

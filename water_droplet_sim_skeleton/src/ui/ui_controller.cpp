@@ -15,6 +15,7 @@ constexpr const char* kDebugViewLabels[] = {
     "Droplet Depth",
     "Droplet Normal",
     "Thickness",
+    "Wireframe",
 };
 
 } // namespace
