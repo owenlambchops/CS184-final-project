@@ -296,6 +296,11 @@ bool RefractiveRenderer::initializeBasicResources() {
         return false;
     }
 
+    if (!dropletWireframeShader_.load("assets/shaders/droplet_wireframe.vert",
+                                      "assets/shaders/droplet_wireframe.frag")) {
+        return false;
+    }
+
     if (!compositeShader_.load("assets/shaders/refract_composite.vert",
                                "assets/shaders/refract_composite.frag")) {
         return false;
@@ -661,6 +666,7 @@ void RefractiveRenderer::releaseResources() {
     supportSurfaceShader_.reset();
     backgroundShader_.reset();
     dropletGBufferShader_.reset();
+    dropletWireframeShader_.reset();
     compositeShader_.reset();
     causticSplatShader_.reset();
 }
@@ -950,7 +956,7 @@ void RefractiveRenderer::renderDropletBackDepth(const Scene& scene, const Camera
     glUseProgram(0);
 }
 
-void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, const RenderParams& params) {
+void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& camera, const RenderParams& params) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width_, height_);
     glDisable(GL_DEPTH_TEST);
@@ -1011,6 +1017,32 @@ void RefractiveRenderer::compositeDroplets(const Scene&, const Camera& camera, c
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    if (params.debugView == RenderDebugView::Wireframe && dropletWireframeShader_.id() != 0) {
+        const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
+        const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        GLint previousPolygonMode[2] = {GL_FILL, GL_FILL};
+        glGetIntegerv(GL_POLYGON_MODE, previousPolygonMode);
+
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        dropletWireframeShader_.use();
+        dropletWireframeShader_.setMat4("uView", matrices.view);
+        dropletWireframeShader_.setMat4("uProj", matrices.proj);
+        dropletWireframeShader_.setVec3("uLineColor", glm::vec3(0.15f, 0.95f, 0.85f));
+
+        for (const auto& droplet : scene.droplets()) {
+            dropletCache_.drawDroplet(droplet->id());
+        }
+
+        glPolygonMode(GL_FRONT_AND_BACK, static_cast<GLenum>(previousPolygonMode[0]));
+        if (cullWasEnabled) glEnable(GL_CULL_FACE);
+        else glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
     }
 
     glDepthMask(GL_TRUE);
