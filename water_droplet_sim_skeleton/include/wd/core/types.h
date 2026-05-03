@@ -57,9 +57,9 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 1000.0;           // gamma
-    double viscousDamping = 2.0;          // mu
-    double laplacianViscosity = 8.0;      // eta
+    double surfaceTension = 10.00;           // gamma
+    double viscousDamping = 0.50;          // mu
+    double laplacianViscosity = 0.30;      // eta
     double density = 1.0;
     double contactStiffness = 0.10;         // alpha
     double friction = 0.0;
@@ -104,8 +104,7 @@ struct SolverParams {
     bool enableContactAngle = false;
     bool enableVolumeCorrect = true;
     bool enableVertexRepulsion = false;
-    bool enableSoftContactBand = true;
-    bool enableContactTangentialRegularizer = true;
+    bool enableContactBandEdgeProjection = true;
     int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;
@@ -113,15 +112,9 @@ struct SolverParams {
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
     double vertexDamping = 0.0;
-    double vertexRepulsionStrength = 80.0;        // acceleration scale
-    double vertexRepulsionTargetRatio = 0.8;      // trigger below ratio * mean edge length
-    double vertexRepulsionMaxAccel = 120.0;       // per-vertex cap
-    double contactBandSpring = 40.0;              // normal spring inside adhesion band
-    double contactBandDamping = 8.0;              // normal damping inside adhesion band
-    double contactTangentialRegStrength = 12.0;   // tangential regularization acceleration scale
-    double contactTangentialRegMaxAccel = 30.0;   // per-vertex cap for tangential regularizer
-    double contactTangentialRegTargetRatio = 0.9; // target ratio * mean edge length in contact band
-
+    int contactBandProjIterations = 3;
+    double contactBandProjRelaxation = 0.2;
+    double contactBandProjTargetRatio = 0.9;
 };
 
 enum class RenderDebugView : int {
@@ -132,6 +125,7 @@ enum class RenderDebugView : int {
     DropletDepth = 4,
     DropletNormal = 5,
     Thickness = 6,
+    Wireframe = 7,
 };
 
 struct RenderParams {

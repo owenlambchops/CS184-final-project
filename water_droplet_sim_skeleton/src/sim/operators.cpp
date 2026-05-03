@@ -277,7 +277,7 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
             const double weight = 1.0 / edgeLen; // stronger when closer
             const Vec3 dv =
-                (curvatureSign * kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
+                0.5 * (curvatureSign * kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
             U.row(j) += dv.transpose();
         }
     }
@@ -382,6 +382,72 @@ void VertexRepulsionOperator::apply(
         if (accelCap > 0.0 && an > accelCap) ai *= accelCap / std::max(an, 1e-8);
         U.row(i) += (ai * dt).transpose();
     }
+}
+
+void ContactBandEdgeProjector::apply(
+        Droplet& drop,
+        const ISurface& surface,
+        double adhesionDist,
+        double targetRatio,
+        int iterations,
+        double relaxation) const {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    const auto& E = drop.edges();
+    const int n = X.rows();
+    if (n == 0 || E.empty()) return;
+
+    const double safeAdhesion = std::max(0.0, adhesionDist);
+    const int iters = std::max(0, iterations);
+    const double omega = std::clamp(relaxation, 0.0, 1.0);
+    if (iters == 0 || omega <= 0.0) return;
+
+    const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
+    const double targetLen = std::max(1e-8, targetRatio * meanEdge);
+
+    MatX3d XPrev = X;
+    for (int it = 0; it < iters; ++it) {
+        drop.updateDerived();
+
+        std::vector<bool> inBand(static_cast<size_t>(n), false);
+        std::vector<Vec3> bandNormal(static_cast<size_t>(n), Vec3::UnitY());
+        for (int i = 0; i < n; ++i) {
+            SurfaceSample s = surface.closestSample(X.row(i).transpose());
+            if (s.signedDistance >= 0.0 && s.signedDistance <= safeAdhesion) {
+                inBand[static_cast<size_t>(i)] = true;
+                bandNormal[static_cast<size_t>(i)] = s.normal.normalized();
+            }
+        }
+
+        for (const auto& e : E) {
+            const int i = e.x();
+            const int j = e.y();
+            if (i < 0 || j < 0 || i >= n || j >= n) continue;
+            if (!inBand[static_cast<size_t>(i)] || !inBand[static_cast<size_t>(j)]) continue;
+
+            const Vec3 xi = X.row(i).transpose();
+            const Vec3 xj = X.row(j).transpose();
+            const Vec3 d = xj - xi;
+            const double len = d.norm();
+            if (len <= 1e-12) continue;
+
+            // PBD-style symmetric correction: reduce edge-length error without high-force injection.
+            const double C = len - targetLen;
+            const Vec3 dir = d / len;
+            Vec3 corr = 0.5 * omega * C * dir;
+
+            Vec3 ni = bandNormal[static_cast<size_t>(i)];
+            Vec3 nj = bandNormal[static_cast<size_t>(j)];
+            corr -= corr.dot(ni) * ni; // tangent at i
+            Vec3 corrJ = corr - corr.dot(nj) * nj; // tangent at j
+
+            X.row(i) += corr.transpose();
+            X.row(j) -= corrJ.transpose();
+        }
+    }
+
+    // Convert projected position change to velocity so next step stays consistent.
+    U += (X - XPrev);
 }
 
 // Public wrapper for closed-volume estimate.
