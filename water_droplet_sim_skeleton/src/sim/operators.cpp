@@ -8,9 +8,12 @@
 namespace wd {
 namespace {
 
+// Small numeric tolerance used for robust normalization/angle logic.
 constexpr double kEps = 1e-10;
 constexpr double kPi = 3.14159265358979323846;
 
+// Builds one-ring adjacency from triangle connectivity.
+// Each vertex stores unique neighboring vertex indices.
 std::vector<std::vector<int>> buildNeighbours(const MatX3i& faces, int n) {
     std::vector<std::set<int>> adjSets(n);
     for (int i = 0; i < faces.rows(); ++i) {
@@ -33,6 +36,8 @@ Weights computeCotangentWeights(const MatX3d& x, const MatX3i& faces) {
     return computeCotangentWeightsCgl(toVec3List(x), toFaceList(faces));
 }
 
+// Applies the cotangent Laplacian to a per-vertex quantity (positions or velocities).
+// The cgl helper fills both deltaX and deltaV; here we use deltaX as the generic output.
 MatX3d computeLaplacian(const MatX3d& src, const std::vector<std::vector<int>>& neighbours, const Weights& w) {
     std::vector<Vec3> srcList = toVec3List(src);
     std::vector<Vec3> deltaX;
@@ -62,6 +67,8 @@ double computeClosedVolumeLocal(const Droplet& drop) {
     return std::abs(V);
 }
 
+// Lumped area mass model: each triangle contributes one third of its area to each corner.
+// Used by volume correction as an area-weighted measure per vertex.
 std::vector<double> computeLumpedAreas(const Droplet& drop) {
     const auto& X = drop.positions();
     const auto& F = drop.faces();
@@ -110,6 +117,7 @@ double computeMeanEdgeLength(const Droplet& drop) {
 
 } // namespace
 
+// Applies external acceleration field samples directly to velocity (semi-implicit update step).
 void ExternalForceOperator::apply(
         Droplet& drop,
         const ISurface&,
@@ -125,13 +133,16 @@ void ExternalForceOperator::apply(
     }
 }
 
+// Enforces surface contact by projection and velocity correction.
+// - Projects near-surface/penetrating vertices to the surface offset by pushout epsilon.
+// - Removes normal velocity component (non-penetration constraint).
+// - Applies tangential speed reduction via simple friction thresholding.
 void CollisionProjector::apply(
         Droplet& drop,
         const ISurface& surface,
         double pushoutEps,
         double adhesionDist,
         double dt) const {
-    (void)adhesionDist;
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -139,7 +150,7 @@ void CollisionProjector::apply(
 
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance < 0.0) {
+        if (s.signedDistance < adhesionDist) {
             // 1) Project penetrated vertex to the closest point on the solid.
             X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
@@ -154,7 +165,7 @@ void CollisionProjector::apply(
             const double speed = vNew.norm();
             if (speed < eps) {
                 vNew.setZero();
-            } else if (speed > 1e-12) {
+            } else {
                 vNew -= eps * (vNew / speed);
             }
 
@@ -165,6 +176,10 @@ void CollisionProjector::apply(
     }
 }
 
+// Velocity-space smoothing/damping operator:
+// - Linear damping by mu.
+// - Laplacian viscosity by eta.
+// - Additional nonlinear damping to suppress high-speed jitter.
 void ViscosityOperator::apply(Droplet& drop, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -203,6 +218,24 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
     }
 }
 
+// Surface tension via curvature flow (discrete mean-curvature force).
+//
+// Key idea:
+// For a triangulated surface, the cotangent Laplacian of position at vertex i
+// approximates mean-curvature normal: deltaX_i ~= H_i * n_i (up to scaling convention).
+// Multiplying by surface tension coefficient gamma gives a force-like term that
+// drives area minimization (smoothing the interface).
+//
+// Intuition on push/pull:
+// - At locally convex "bulging out" regions, the curvature-normal term points
+//   inward, so vertices are pulled inward.
+// - At locally concave/indented regions, the term points outward, so vertices
+//   are pushed outward.
+// This bidirectional behavior reduces curvature variation and shrinks high-curvature
+// features, which is exactly the capillary smoothing effect of surface tension.
+//
+// Integration in this code:
+// f_st = gamma * deltaX, a_st = f_st / density, then v += a_st * dt.
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -217,14 +250,15 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
         const Vec3 dxi = deltaX.row(i).transpose();
         if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
 
-        // Python parity:
-        // f_st = gamma * delta_x, then a_st = f_st / density and v += a_st * dt.
+        // Convert curvature proxy into acceleration and integrate to velocity.
         const Vec3 fSt = gamma * dxi;
         const Vec3 aSt = fSt / density;
         U.row(i) += (aSt * dt).transpose();
     }
 }
 
+// Contact-angle hysteresis operator near the contact line.
+// Applies restoring force only when contact angle exits [receding, advancing] band.
 void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
     auto& U = drop.velocities();
     const auto& X = drop.positions();
@@ -264,6 +298,8 @@ void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double d
     }
 }
 
+// Mesh-quality regularization in edge space.
+// Short edges repel, long edges attract, then result is projected to tangent plane.
 void VertexRepulsionOperator::apply(
         Droplet& drop,
         double dt,
@@ -322,10 +358,14 @@ void VertexRepulsionOperator::apply(
     }
 }
 
+// Public wrapper for closed-volume estimate.
 double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&) const {
     return computeClosedVolumeLocal(drop);
 }
 
+// Two-stage volume stabilization:
+// 1) Local velocity correction (reduce volume-changing deformation modes).
+// 2) Global positional correction to hit target volume exactly.
 void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) const {
     (void)surface;
     (void)dt;
