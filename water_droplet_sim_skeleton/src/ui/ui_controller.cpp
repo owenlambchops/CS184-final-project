@@ -25,6 +25,11 @@ UiActions UiController::draw(SolverParams&,
                              SurfaceMaterialParams& surfaceMaterial,
                              SurfaceRenderParams& surfaceRender,
                              double planeSideLength,
+                             bool planeTiltEnabled,
+                             double planeTiltMaxDeg,
+                             double planeTiltResponsiveness,
+                             double planeTiltAxisScaleX,
+                             double planeTiltAxisScaleZ,
                              const Vec3& gravityLikeForce,
                              MergeSplitController&) {
     UiActions actions;
@@ -71,6 +76,35 @@ UiActions UiController::draw(SolverParams&,
             actions.setPlaneSideLength = true;
             actions.planeSideLength = std::max(editedSideLength, 0.1);
         }
+    }
+    bool tiltEnabled = planeTiltEnabled;
+    if (ImGui::Checkbox("Enable Plane Tilt", &tiltEnabled)) {
+        actions.setPlaneTiltEnabled = true;
+        actions.planeTiltEnabled = tiltEnabled;
+    }
+    double maxTiltDeg = planeTiltMaxDeg;
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    if (ImGui::DragScalar("Max Tilt (deg)", ImGuiDataType_Double, &maxTiltDeg, 0.25f, nullptr, nullptr, "%.2f")) {
+        actions.setPlaneTiltMaxDeg = true;
+        actions.planeTiltMaxDeg = std::clamp(maxTiltDeg, 0.0, 30.0);
+    }
+    double tiltResponsiveness = planeTiltResponsiveness;
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    if (ImGui::DragScalar("Tilt Response", ImGuiDataType_Double, &tiltResponsiveness, 0.1f, nullptr, nullptr, "%.2f")) {
+        actions.setPlaneTiltResponsiveness = true;
+        actions.planeTiltResponsiveness = std::max(tiltResponsiveness, 0.0);
+    }
+    double tiltAxisScaleX = planeTiltAxisScaleX;
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    if (ImGui::DragScalar("Tilt X Scale", ImGuiDataType_Double, &tiltAxisScaleX, 0.05f, nullptr, nullptr, "%.2f")) {
+        actions.setPlaneTiltAxisScaleX = true;
+        actions.planeTiltAxisScaleX = tiltAxisScaleX;
+    }
+    double tiltAxisScaleZ = planeTiltAxisScaleZ;
+    ImGui::SetNextItemWidth(vectorInputWidth);
+    if (ImGui::DragScalar("Tilt Z Scale", ImGuiDataType_Double, &tiltAxisScaleZ, 0.05f, nullptr, nullptr, "%.2f")) {
+        actions.setPlaneTiltAxisScaleZ = true;
+        actions.planeTiltAxisScaleZ = tiltAxisScaleZ;
     }
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Glass IOR", ImGuiDataType_Double, &surfaceRender.ior, 0.01f, nullptr, nullptr, "%.3f");

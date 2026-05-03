@@ -3,6 +3,7 @@
 #include "wd/experiments/experiment_logger.h"
 #include "wd/interaction/drag_interactor.h"
 #include "wd/interaction/input_router.h"
+#include "wd/interaction/plane_tilt_interactor.h"
 #include "wd/render/refractive_renderer.h"
 #include "wd/sim/simulation_system.h"
 #include "wd/ui/ui_controller.h"
@@ -57,6 +58,7 @@ private:
 
     std::unique_ptr<InputRouter> input_;
     std::unique_ptr<DragInteractor> dragInteractor_;
+    std::unique_ptr<PlaneTiltInteractor> planeTiltInteractor_;
     std::unique_ptr<UiController> ui_;
     std::unique_ptr<SimulationSystem> sim_;
     std::unique_ptr<RefractiveRenderer> renderer_;
@@ -79,6 +81,7 @@ private:
     double lastCameraMouseY_ = 0.0;
     double lastFrameTimeSec_ = 0.0;
     double cameraScrollVelocity_ = 0.0;
+    PlaneTiltParams planeTiltParams_;
 };
 
 } // namespace wd

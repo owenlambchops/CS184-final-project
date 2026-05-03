@@ -51,6 +51,7 @@ add_library(wd_core
     src/interaction/input_router.cpp
     src/interaction/picker.cpp
     src/interaction/drag_interactor.cpp
+    src/interaction/plane_tilt_interactor.cpp
     src/ui/ui_controller.cpp
     src/experiments/experiment_logger.cpp
     src/experiments/screenshot_writer.cpp

@@ -10,14 +10,18 @@ Vec3 safeNormalize(const Vec3& v, const Vec3& fallback) {
     return n > 1e-12 ? v / n : fallback;
 }
 
+void buildPlaneFrame(const Vec3& normal, Vec3& tangentU, Vec3& tangentV) {
+    Vec3 seed = std::abs(normal.dot(Vec3::UnitY())) < 0.9 ? Vec3::UnitY() : Vec3::UnitX();
+    tangentU = safeNormalize(seed.cross(normal), Vec3::UnitX());
+    tangentV = safeNormalize(normal.cross(tangentU), Vec3::UnitZ());
+}
+
 constexpr double kOutsideSignedDistance = 1e6;
 } // namespace
 
 PlaneSurface::PlaneSurface(const Vec3& origin, const Vec3& normal, double sideLength)
     : origin_(origin), normal_(safeNormalize(normal, Vec3::UnitY())) {
-    Vec3 seed = std::abs(normal_.dot(Vec3::UnitY())) < 0.9 ? Vec3::UnitY() : Vec3::UnitX();
-    tangentU_ = safeNormalize(seed.cross(normal_), Vec3::UnitX());
-    tangentV_ = safeNormalize(normal_.cross(tangentU_), Vec3::UnitZ());
+    buildPlaneFrame(normal_, tangentU_, tangentV_);
     setSideLength(sideLength);
 }
 
@@ -99,6 +103,11 @@ SurfaceRenderMesh PlaneSurface::buildRenderMesh() const {
 
 void PlaneSurface::setSideLength(double sideLength) {
     sideLength_ = std::max(kMinSideLength, sideLength);
+}
+
+void PlaneSurface::setNormal(const Vec3& normal) {
+    normal_ = safeNormalize(normal, Vec3::UnitY());
+    buildPlaneFrame(normal_, tangentU_, tangentV_);
 }
 
 bool PlaneSurface::containsProjection(const Vec3& projectedPoint) const {

@@ -143,6 +143,7 @@ bool App::initialize() {
 
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
+    planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
     runName_ = makeTimestampedRunName();
@@ -217,6 +218,7 @@ void App::restartSimulation() {
 
     buildDefaultScene();
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
+    planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
     singleStepRequested_ = false;
 }
 
@@ -329,6 +331,9 @@ void App::update() {
     if (!imguiWantsMouse && dragInteractor_ && input_) {
         dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
     }
+    if (!imguiWantsMouse && planeTiltInteractor_ && input_) {
+        planeTiltInteractor_->update(input_->state(), width_, height_, dt, scene_, planeTiltParams_);
+    }
 
     if (sim_ && (!paused_ || singleStepRequested_)) {
         sim_->step(scene_);
@@ -358,11 +363,21 @@ void App::render() {
             scene_.surface().material(),
             scene_.surface().renderParams(),
             planeSideLength,
+            planeTiltParams_.enabled,
+            planeTiltParams_.maxTiltDeg,
+            planeTiltParams_.responsiveness,
+            planeTiltParams_.axisScaleX,
+            planeTiltParams_.axisScaleZ,
             gravityLikeForce_,
             sim_->mergeSplitController());
         if (actions.setPlaneSideLength && planeSurface) {
             planeSurface->setSideLength(actions.planeSideLength);
         }
+        if (actions.setPlaneTiltEnabled) planeTiltParams_.enabled = actions.planeTiltEnabled;
+        if (actions.setPlaneTiltMaxDeg) planeTiltParams_.maxTiltDeg = actions.planeTiltMaxDeg;
+        if (actions.setPlaneTiltResponsiveness) planeTiltParams_.responsiveness = actions.planeTiltResponsiveness;
+        if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
+        if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
         if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
         if (actions.applyGravity) {
             gravityLikeForce_ = actions.gravityForce;
@@ -427,6 +442,7 @@ void App::shutdown() {
     logger_.reset();
     ui_.reset();
     dragInteractor_.reset();
+    planeTiltInteractor_.reset();
     input_.reset();
     sim_.reset();
     renderer_.reset();
