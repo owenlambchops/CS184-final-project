@@ -142,24 +142,17 @@ void CollisionProjector::apply(
         const ISurface& surface,
         double pushoutEps,
         double adhesionDist,
-        double dt,
-        bool enableSoftContactBand,
-        double contactBandSpring,
-        double contactBandDamping) const {
+        double dt) const {
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
     const double eps = std::max(0.0, drop.material().friction);
-    const double safeAdhesionDist = std::max(0.0, adhesionDist);
-    const double safePushoutEps = std::max(0.0, pushoutEps);
-    const double safeBandSpring = std::max(0.0, contactBandSpring);
-    const double safeBandDamping = std::max(0.0, contactBandDamping);
 
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance < 0.0) {
+        if (s.signedDistance < adhesionDist) {
             // 1) Project penetrated vertex to the closest point on the solid.
-            X.row(i) = (s.position + safePushoutEps * s.normal.normalized()).transpose();
+            X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
 
             const Vec3 n = s.normal.normalized();
@@ -179,28 +172,7 @@ void CollisionProjector::apply(
             // 4) Immediate position correction by velocity change.
             X.row(i) += ((vNew - vOld) * dt).transpose();
             U.row(i) = vNew.transpose();
-            continue;
         }
-
-        if (!enableSoftContactBand || s.signedDistance > safeAdhesionDist) continue;
-
-        const Vec3 n = s.normal.normalized();
-        const Vec3 vOld = U.row(i).transpose();
-        const double vNormal = vOld.dot(n);
-        const double standoffError = safePushoutEps - s.signedDistance;
-
-        Vec3 aSoft = Vec3::Zero();
-        if (standoffError > 0.0) {
-            aSoft += safeBandSpring * standoffError * n;
-        }
-        aSoft += -safeBandDamping * vNormal * n;
-
-        Vec3 vNew = vOld + aSoft * dt;
-        const double vNewNormal = vNew.dot(n);
-        Vec3 vTan = vNew - vNewNormal * n;
-        const double tangentialDamp = std::clamp(eps * dt, 0.0, 0.25);
-        vTan *= (1.0 - tangentialDamp);
-        U.row(i) = (vNewNormal * n + vTan).transpose();
     }
 }
 
@@ -267,94 +239,14 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    if (X.rows() == 0 || dt <= 0.0) return;
 
-    auto neighbours = buildNeighbours(drop.faces(), X.rows());
-    Weights w = computeCotangentWeights(X, drop.faces());
-    MatX3d deltaX = computeLaplacian(X, neighbours, w);
+    const auto neighbours = buildNeighbours(drop.faces(), X.rows());
+    const Weights w = computeCotangentWeights(X, drop.faces());
+    const MatX3d lapX = computeLaplacian(X, neighbours, w);
 
-    const double gamma = drop.material().surfaceTension;
-    const double density = std::max(drop.material().density, 1e-8);
-    for (int i = 0; i < X.rows(); ++i) {
-        const Vec3 dxi = deltaX.row(i).transpose();
-        if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
-
-        // Convert curvature proxy into acceleration and integrate to velocity.
-        const Vec3 fSt = gamma * dxi;
-        const Vec3 aSt = fSt / density;
-        U.row(i) += (aSt * dt).transpose();
-    }
-}
-
-void ContactTangentialRegularizerOperator::apply(
-        Droplet& drop,
-        const ISurface& surface,
-        double dt,
-        double adhesionDist,
-        double targetRatio,
-        double strength,
-        double maxAccel) const {
-    if (dt <= 0.0 || strength <= 0.0 || maxAccel <= 0.0) return;
-
-    const auto& E = drop.edges();
-    const auto& X = drop.positions();
-    auto& U = drop.velocities();
-    const int n = X.rows();
-    if (n == 0 || E.empty()) return;
-
-    const double safeAdhesionDist = std::max(0.0, adhesionDist);
-    const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
-    const double targetLen = std::max(1e-8, targetRatio * meanEdge);
-    const double density = std::max(drop.material().density, 1e-8);
-    const double accelCap = std::max(0.0, maxAccel);
-
-    std::vector<bool> inContactBand(static_cast<size_t>(n), false);
-    std::vector<Vec3> contactNormals(static_cast<size_t>(n), Vec3::UnitY());
-    for (int i = 0; i < n; ++i) {
-        SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance >= 0.0 && s.signedDistance <= safeAdhesionDist) {
-            inContactBand[static_cast<size_t>(i)] = true;
-            contactNormals[static_cast<size_t>(i)] = s.normal.normalized();
-        }
-    }
-
-    MatX3d aReg = MatX3d::Zero(n, 3);
-    for (const auto& e : E) {
-        const int i = e.x();
-        const int j = e.y();
-        if (i < 0 || j < 0 || i >= n || j >= n) continue;
-        if (!inContactBand[static_cast<size_t>(i)] || !inContactBand[static_cast<size_t>(j)]) continue;
-
-        const Vec3 xi = X.row(i).transpose();
-        const Vec3 xj = X.row(j).transpose();
-        const Vec3 d = xj - xi;
-        const double len = d.norm();
-        if (len <= 1e-12) continue;
-
-        const Vec3 dir = d / len;
-        const double rel = (len - targetLen) / targetLen;
-        const double smoothRel = rel / std::sqrt(1.0 + rel * rel);
-        const double mag = (strength * smoothRel) / density;
-        if (!std::isfinite(mag) || std::abs(mag) <= 1e-12) continue;
-
-        Vec3 ai = mag * dir;
-        Vec3 aj = -mag * dir;
-
-        const Vec3 ni = contactNormals[static_cast<size_t>(i)];
-        const Vec3 nj = contactNormals[static_cast<size_t>(j)];
-        ai -= ai.dot(ni) * ni;
-        aj -= aj.dot(nj) * nj;
-
-        aReg.row(i) += ai.transpose();
-        aReg.row(j) += aj.transpose();
-    }
-
-    for (int i = 0; i < n; ++i) {
-        Vec3 ai = aReg.row(i).transpose();
-        const double an = ai.norm();
-        if (!std::isfinite(an) || an <= 1e-12) continue;
-        if (an > accelCap) ai *= accelCap / an;
-        U.row(i) += (ai * dt).transpose();
-    }
+    const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
+    U += scale * lapX;
 }
 
 // Contact-angle hysteresis operator near the contact line.
