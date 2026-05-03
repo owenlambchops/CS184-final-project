@@ -240,6 +240,14 @@ bool splitLongestEdge(Droplet& drop, double splitLen) {
     const auto& E = drop.edges();
     if (E.empty()) return false;
 
+    std::map<int64_t, int> edgeFaceCount;
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const Eigen::Vector3i f = F.row(fi);
+        edgeFaceCount[undirectedEdgeKey(f[0], f[1])] += 1;
+        edgeFaceCount[undirectedEdgeKey(f[1], f[2])] += 1;
+        edgeFaceCount[undirectedEdgeKey(f[2], f[0])] += 1;
+    }
+
     int bestI = -1;
     int bestJ = -1;
     double bestLen = splitLen;
@@ -247,6 +255,8 @@ bool splitLongestEdge(Droplet& drop, double splitLen) {
         const int i = e.x();
         const int j = e.y();
         if (i < 0 || j < 0 || i >= X.rows() || j >= X.rows()) continue;
+        const auto it = edgeFaceCount.find(undirectedEdgeKey(i, j));
+        if (it == edgeFaceCount.end() || it->second != 2) continue;
         const double len = (X.row(i).transpose() - X.row(j).transpose()).norm();
         if (len > bestLen) {
             bestLen = len;
@@ -255,6 +265,54 @@ bool splitLongestEdge(Droplet& drop, double splitLen) {
         }
     }
     if (bestI < 0 || bestJ < 0) return false;
+
+    const int n = X.rows();
+    MatX3d Xn(n + 1, 3);
+    MatX3d Un(n + 1, 3);
+    Xn.topRows(n) = X;
+    Un.topRows(n) = U;
+    Xn.row(n) = 0.5 * (X.row(bestI) + X.row(bestJ));
+    Un.row(n) = 0.5 * (U.row(bestI) + U.row(bestJ));
+    X = std::move(Xn);
+    U = std::move(Un);
+
+    std::vector<Eigen::Vector3i> facesOut;
+    facesOut.reserve(static_cast<size_t>(F.rows()) + 8);
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        Eigen::Vector3i f = F.row(fi);
+        if (!faceContainsEdge(f, bestI, bestJ)) {
+            facesOut.push_back(f);
+            continue;
+        }
+        const int a = f[0];
+        const int b = f[1];
+        const int c = f[2];
+        if ((a == bestI && b == bestJ) || (a == bestJ && b == bestI)) {
+            facesOut.emplace_back(a, n, c);
+            facesOut.emplace_back(n, b, c);
+        } else if ((b == bestI && c == bestJ) || (b == bestJ && c == bestI)) {
+            facesOut.emplace_back(b, n, a);
+            facesOut.emplace_back(n, c, a);
+        } else if ((c == bestI && a == bestJ) || (c == bestJ && a == bestI)) {
+            facesOut.emplace_back(c, n, b);
+            facesOut.emplace_back(n, a, b);
+        } else {
+            facesOut.push_back(f);
+        }
+    }
+
+    MatX3i Fn(static_cast<int>(facesOut.size()), 3);
+    for (int i = 0; i < static_cast<int>(facesOut.size()); ++i) Fn.row(i) = facesOut[static_cast<size_t>(i)];
+    F = std::move(Fn);
+    drop.edges().clear();
+    return true;
+}
+
+bool splitEdgeWithWinding(Droplet& drop, int bestI, int bestJ) {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    auto& F = drop.faces();
+    if (bestI < 0 || bestJ < 0 || bestI >= X.rows() || bestJ >= X.rows() || bestI == bestJ) return false;
 
     const int n = X.rows();
     MatX3d Xn(n + 1, 3);
@@ -335,6 +393,122 @@ bool collapseShortestEdge(Droplet& drop, double collapseLen) {
 
     compactMeshData(drop);
     return true;
+}
+
+bool collapseEdge(Droplet& drop, int bestI, int bestJ) {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    auto& F = drop.faces();
+    if (bestI < 0 || bestJ < 0 || bestI >= X.rows() || bestJ >= X.rows()) return false;
+    if (bestI == bestJ) return false;
+    if (bestI > bestJ) std::swap(bestI, bestJ);
+
+    X.row(bestI) = 0.5 * (X.row(bestI) + X.row(bestJ));
+    U.row(bestI) = 0.5 * (U.row(bestI) + U.row(bestJ));
+
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        Eigen::Vector3i f = F.row(fi);
+        if (replaceVertexInFace(f, bestJ, bestI)) {
+            F.row(fi) = f;
+        }
+    }
+    compactMeshData(drop);
+    return true;
+}
+
+bool splitOneLargeFace(Droplet& drop, double maxArea, int maxVertices) {
+    const auto& F = drop.faces();
+    const auto& X = drop.positions();
+    if (F.rows() == 0) return false;
+    if (maxVertices > 0 && X.rows() >= maxVertices) return false;
+
+    int bestFace = -1;
+    double bestArea = maxArea;
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const Eigen::Vector3i f = F.row(fi);
+        const double a = faceArea(X, f);
+        if (a > bestArea) {
+            bestArea = a;
+            bestFace = fi;
+        }
+    }
+    if (bestFace < 0) return false;
+
+    const Eigen::Vector3i f = F.row(bestFace);
+    const int a = f[0], b = f[1], c = f[2];
+    const double lab = (X.row(a).transpose() - X.row(b).transpose()).norm();
+    const double lbc = (X.row(b).transpose() - X.row(c).transpose()).norm();
+    const double lca = (X.row(c).transpose() - X.row(a).transpose()).norm();
+    if (lab >= lbc && lab >= lca) return splitEdgeWithWinding(drop, a, b);
+    if (lbc >= lab && lbc >= lca) return splitEdgeWithWinding(drop, b, c);
+    return splitEdgeWithWinding(drop, c, a);
+}
+
+bool collapseOneSmallFace(Droplet& drop, double minArea) {
+    const auto& F = drop.faces();
+    const auto& X = drop.positions();
+    if (F.rows() == 0) return false;
+
+    int bestFace = -1;
+    double smallestArea = minArea;
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const Eigen::Vector3i f = F.row(fi);
+        const double a = faceArea(X, f);
+        if (a < smallestArea) {
+            smallestArea = a;
+            bestFace = fi;
+        }
+    }
+    if (bestFace < 0) return false;
+
+    const Eigen::Vector3i f = F.row(bestFace);
+    const int a = f[0], b = f[1], c = f[2];
+    const double lab = (X.row(a).transpose() - X.row(b).transpose()).norm();
+    const double lbc = (X.row(b).transpose() - X.row(c).transpose()).norm();
+    const double lca = (X.row(c).transpose() - X.row(a).transpose()).norm();
+    if (lab <= lbc && lab <= lca) return collapseEdge(drop, a, b);
+    if (lbc <= lab && lbc <= lca) return collapseEdge(drop, b, c);
+    return collapseEdge(drop, c, a);
+}
+
+void applyTangentialRelaxation(Droplet& drop, double lambda) {
+    auto& X = drop.positions();
+    const auto& F = drop.faces();
+    const int n = X.rows();
+    if (n == 0 || F.rows() == 0) return;
+
+    std::vector<std::set<int>> adjSets(static_cast<size_t>(n));
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const int a = F(fi, 0);
+        const int b = F(fi, 1);
+        const int c = F(fi, 2);
+        adjSets[static_cast<size_t>(a)].insert(b);
+        adjSets[static_cast<size_t>(a)].insert(c);
+        adjSets[static_cast<size_t>(b)].insert(a);
+        adjSets[static_cast<size_t>(b)].insert(c);
+        adjSets[static_cast<size_t>(c)].insert(a);
+        adjSets[static_cast<size_t>(c)].insert(b);
+    }
+
+    const MatX3d X0 = X;
+    const MatX3d N = drop.derived().vertexNormals;
+    for (int i = 0; i < n; ++i) {
+        const auto& nbrs = adjSets[static_cast<size_t>(i)];
+        if (nbrs.empty()) continue;
+
+        Vec3 avg = Vec3::Zero();
+        for (int j : nbrs) avg += X0.row(j).transpose();
+        avg /= static_cast<double>(nbrs.size());
+
+        Vec3 disp = avg - X0.row(i).transpose();
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn > 1e-12) {
+            ni /= nn;
+            disp -= disp.dot(ni) * ni;
+        }
+        X.row(i) = (X0.row(i).transpose() + lambda * disp).transpose();
+    }
 }
 
 } // namespace
@@ -558,23 +732,23 @@ void AdaptiveRemesher::apply(
         double collapseThresh,
         int maxOps,
         int maxVertices) const {
+    (void)collapseThresh;
     if (maxOps <= 0) return;
     if (drop.positions().rows() < 4 || drop.faces().rows() < 4) return;
 
     const double baseLen = (targetLen > 1e-8) ? targetLen : std::max(computeMeanEdgeLength(drop), 1e-8);
-    const double splitLen = std::max(baseLen * splitThresh, 1e-8);
-    const double collapseLen = std::max(baseLen * collapseThresh, 1e-8);
-    if (collapseLen >= splitLen) return;
-
+    const double targetArea = std::max((std::sqrt(3.0) * 0.25) * baseLen * baseLen, 1e-10);
+    const double maxFaceArea = std::max(splitThresh * targetArea, 1e-10);
+    const double minFaceArea = std::max(collapseThresh * targetArea, 1e-12);
+    bool changedAny = false;
     for (int op = 0; op < maxOps; ++op) {
         drop.updateDerived();
         const MatX3d Xbak = drop.positions();
         const MatX3d Ubak = drop.velocities();
         const MatX3i Fbak = drop.faces();
         bool changed = false;
-        const bool canSplit = (maxVertices <= 0) || (drop.positions().rows() < maxVertices);
-        if (canSplit) changed = splitLongestEdge(drop, splitLen);
-        if (!changed) changed = collapseShortestEdge(drop, collapseLen);
+        changed = splitOneLargeFace(drop, maxFaceArea, maxVertices);
+        if (!changed) changed = collapseOneSmallFace(drop, minFaceArea);
         if (!changed) break;
         compactMeshData(drop);
         if (!isTopologyConsistent(drop)) {
@@ -584,6 +758,14 @@ void AdaptiveRemesher::apply(
             drop.edges().clear();
             break;
         }
+        changedAny = true;
+    }
+
+    if (changedAny) {
+        drop.updateDerived();
+        applyTangentialRelaxation(drop, 0.20);
+        compactMeshData(drop);
+        drop.updateDerived();
     }
 }
 
