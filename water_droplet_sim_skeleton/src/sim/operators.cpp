@@ -1,4 +1,5 @@
 #include "wd/sim/operators.h"
+#include "wd/sim/cgl_math.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -29,76 +30,18 @@ std::vector<std::vector<int>> buildNeighbours(const MatX3i& faces, int n) {
 }
 
 Weights computeCotangentWeights(const MatX3d& x, const MatX3i& faces) {
-    Weights w;
-    const double eps = 1e-5;
-
-    for (int fi = 0; fi < faces.rows(); ++fi) {
-        const int i0 = faces(fi, 0);
-        const int i1 = faces(fi, 1);
-        const int i2 = faces(fi, 2);
-        const Vec3 p0 = x.row(i0).transpose();
-        const Vec3 p1 = x.row(i1).transpose();
-        const Vec3 p2 = x.row(i2).transpose();
-
-        // Edge vectors from each vertex
-        Vec3 e0_1 = p1 - p0,  e0_2 = p2 - p0;   // edges at vertex 0
-        Vec3 e1_2 = p2 - p1,  e1_0 = p0 - p1;   // edges at vertex 1
-        Vec3 e2_0 = p0 - p2,  e2_1 = p1 - p2;   // edges at vertex 2
-
-        // Cross products (their norms equal twice the sub-triangle area)
-        const Vec3 cr0 = e0_1.cross(e0_2);
-        const Vec3 cr1 = e1_2.cross(e1_0);
-        const Vec3 cr2 = e2_0.cross(e2_1);
-
-        double n0 = cr0.norm();
-        double n1 = cr1.norm();
-        double n2 = cr2.norm();
-
-        // Guard against degenerate (zero-area) faces — mirrors np.where(norm==0, 1e-5, norm)
-        if (n0 == 0.0) n0 = eps;
-        if (n1 == 0.0) n1 = eps;
-        if (n2 == 0.0) n2 = eps;
-
-        // cot(angle) = dot(edges) / |cross(edges)|
-        const double cot0 = e0_1.dot(e0_2) / n0;
-        const double cot1 = e1_2.dot(e1_0) / n1;
-        const double cot2 = e2_0.dot(e2_1) / n2;
-
-        // Assign weights; clamp negatives to 0 (matches Python's max(0.0, ...))
-        // w0 is the weight on edge (i0,i1), opposite to vertex i2 → uses cot2
-        const double w0 = std::max(0.0, cot2 * 0.5);
-        const double w1 = std::max(0.0, cot0 * 0.5);
-        const double w2 = std::max(0.0, cot1 * 0.5);
-
-        w[i0][i1] += w0; w[i1][i0] += w0;
-        w[i1][i2] += w1; w[i2][i1] += w1;
-        w[i2][i0] += w2; w[i0][i2] += w2;
-    }
-
-    return w;
+    return computeCotangentWeightsCgl(toVec3List(x), toFaceList(faces));
 }
 
 MatX3d computeLaplacian(const MatX3d& src, const std::vector<std::vector<int>>& neighbours, const Weights& w) {
+    std::vector<Vec3> srcList = toVec3List(src);
+    std::vector<Vec3> deltaX;
+    std::vector<Vec3> deltaV;
+    computeLaplaciansCgl(srcList, srcList, neighbours, w, deltaX, deltaV);
+
     MatX3d lap = MatX3d::Zero(src.rows(), 3);
     for (int i = 0; i < src.rows(); ++i) {
-        Vec3 accum = Vec3::Zero();
-        double sumW = 0.0;
-
-        auto wi = w.find(i);
-        if (wi == w.end()) continue;
-
-        for (int j : neighbours[i]) {
-            double wij = 1.0;
-            auto wj = wi->second.find(j);
-            if (wj != wi->second.end()) wij = wj->second;
-
-            accum += wij * (src.row(j).transpose() - src.row(i).transpose());
-            sumW += wij;
-        }
-
-        if (sumW > 0.0) {
-            lap.row(i) = (accum / sumW).transpose();
-        }
+        lap.row(i) = deltaX[static_cast<size_t>(i)].transpose();
     }
     return lap;
 }
