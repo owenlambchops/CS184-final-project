@@ -126,6 +126,7 @@ enum class RenderDebugView : int {
     DropletNormal = 5,
     Thickness = 6,
     Wireframe = 7,
+    Caustics = 8,
 };
 
 struct RenderParams {
