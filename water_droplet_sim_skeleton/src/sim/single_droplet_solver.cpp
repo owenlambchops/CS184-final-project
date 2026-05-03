@@ -33,7 +33,17 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
         }
 
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
-        if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
+        if (params_.enableCollision) {
+            collision_.apply(
+                    drop,
+                    surface,
+                    params_.collisionPushoutEps,
+                    params_.adhesionDistance,
+                    dt,
+                    params_.enableSoftContactBand,
+                    params_.contactBandSpring,
+                    params_.contactBandDamping);
+        }
 
 
         // Volume correction must run on the live droplet state.
@@ -66,6 +76,16 @@ MatX3d SingleDropletSolver::computeAcceleration(
 
     if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
     if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
+    if (params_.enableContactTangentialRegularizer) {
+        contactTangentialRegularizer_.apply(
+                internalDrop,
+                surface,
+                1.0,
+                params_.adhesionDistance,
+                params_.contactTangentialRegTargetRatio,
+                params_.contactTangentialRegStrength,
+                params_.contactTangentialRegMaxAccel);
+    }
     if (params_.enableVertexRepulsion) {
         repulsion_.apply(
                 internalDrop,

@@ -25,6 +25,7 @@ private:
     CurvatureFlowOperator curvature_;
     ContactLineOperator contact_;
     VertexRepulsionOperator repulsion_;
+    ContactTangentialRegularizerOperator contactTangentialRegularizer_;
     VolumeCorrector volume_;
 };
 

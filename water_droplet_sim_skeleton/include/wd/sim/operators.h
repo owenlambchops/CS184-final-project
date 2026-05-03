@@ -12,7 +12,14 @@ public:
 
 class CollisionProjector {
 public:
-    void apply(Droplet& drop, const ISurface& surface, double pushoutEps, double adhesionDist, double dt) const;
+    void apply(Droplet& drop,
+               const ISurface& surface,
+               double pushoutEps,
+               double adhesionDist,
+               double dt,
+               bool enableSoftContactBand,
+               double contactBandSpring,
+               double contactBandDamping) const;
 };
 
 class ViscosityOperator {
@@ -33,6 +40,17 @@ public:
 class VertexRepulsionOperator {
 public:
     void apply(Droplet& drop, double dt, double targetRatio, double strength, double maxAccel) const;
+};
+
+class ContactTangentialRegularizerOperator {
+public:
+    void apply(Droplet& drop,
+               const ISurface& surface,
+               double dt,
+               double adhesionDist,
+               double targetRatio,
+               double strength,
+               double maxAccel) const;
 };
 
 class VolumeCorrector {
