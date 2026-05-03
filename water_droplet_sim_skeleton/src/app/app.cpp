@@ -265,6 +265,30 @@ void App::processInput() {
         double mouseX = 0.0;
         double mouseY = 0.0;
         glfwGetCursorPos(window_, &mouseX, &mouseY);
+
+        bool wrapped = false;
+        if (width_ > 0) {
+            if (mouseX < 0.0) {
+                mouseX += static_cast<double>(width_);
+                wrapped = true;
+            } else if (mouseX >= static_cast<double>(width_)) {
+                mouseX -= static_cast<double>(width_);
+                wrapped = true;
+            }
+        }
+        if (height_ > 0) {
+            if (mouseY < 0.0) {
+                mouseY += static_cast<double>(height_);
+                wrapped = true;
+            } else if (mouseY >= static_cast<double>(height_)) {
+                mouseY -= static_cast<double>(height_);
+                wrapped = true;
+            }
+        }
+        if (wrapped) {
+            glfwSetCursorPos(window_, mouseX, mouseY);
+        }
+
         input_->setMousePosition(mouseX, mouseY);
         input_->setLeftButton(glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
         input_->setRightButton(glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
