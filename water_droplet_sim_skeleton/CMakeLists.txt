@@ -39,6 +39,7 @@ add_library(wd_core
     src/sim/droplet_template.cpp
     src/sim/droplet.cpp
     src/sim/droplet_factory.cpp
+    src/sim/cgl_math.cpp
     src/sim/operators.cpp
     src/sim/single_droplet_solver.cpp
     src/sim/merge_split_controller.cpp

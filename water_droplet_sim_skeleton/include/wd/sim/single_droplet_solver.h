@@ -24,8 +24,8 @@ private:
     ViscosityOperator viscosity_;
     CurvatureFlowOperator curvature_;
     ContactLineOperator contact_;
+    VertexRepulsionOperator repulsion_;
     VolumeCorrector volume_;
-    EdgeLengthRegularizer edgeRegularizer_;
 };
 
 } // namespace wd

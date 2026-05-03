@@ -30,15 +30,15 @@ public:
     void apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const;
 };
 
+class VertexRepulsionOperator {
+public:
+    void apply(Droplet& drop, double dt, double targetRatio, double strength, double maxAccel) const;
+};
+
 class VolumeCorrector {
 public:
     double computeClosedVolume(const Droplet& drop, const ISurface& surface) const;
     void apply(Droplet& drop, const ISurface& surface, double dt) const;
-};
-
-class EdgeLengthRegularizer {
-public:
-    void apply(Droplet& drop, double dt, double targetRatio, double stiffness, double maxRelativeSpeed) const;
 };
 
 // TODO(remesh-step2): Add true topology-changing remeshing operator.
