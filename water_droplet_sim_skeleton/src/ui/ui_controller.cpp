@@ -21,7 +21,7 @@ constexpr const char* kDebugViewLabels[] = {
 
 } // namespace
 
-UiActions UiController::draw(SolverParams&,
+UiActions UiController::draw(SolverParams& solverParams,
                              RenderParams& renderParams,
                              MaterialParams&,
                              SurfaceMaterialParams& surfaceMaterial,
@@ -176,6 +176,7 @@ UiActions UiController::draw(SolverParams&,
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Surface Friction", ImGuiDataType_Double, &surfaceMaterial.friction, 0.01f, nullptr, nullptr, "%.3f");
     surfaceMaterial.friction = std::max(surfaceMaterial.friction, 0.0);
+    ImGui::Checkbox("Enable Contact Angle", &solverParams.enableContactAngle);
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Receding Angle", ImGuiDataType_Double, &surfaceMaterial.recContactAngleDeg, 1.0f, nullptr, nullptr, "%.1f");
     ImGui::SetNextItemWidth(vectorInputWidth);
@@ -186,8 +187,8 @@ UiActions UiController::draw(SolverParams&,
     ImGui::DragScalar("Contact Stiffness", ImGuiDataType_Double, &surfaceMaterial.contactStiffness, 0.01f, nullptr, nullptr, "%.3f");
     surfaceMaterial.contactStiffness = std::max(surfaceMaterial.contactStiffness, 0.0);
     ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalar("Adhesion Distance", ImGuiDataType_Double, &surfaceMaterial.adhesionDistance, 0.005f, nullptr, nullptr, "%.3f");
-    surfaceMaterial.adhesionDistance = std::max(surfaceMaterial.adhesionDistance, 0.0);
+    ImGui::DragScalar("Adhesion Distance", ImGuiDataType_Double, &solverParams.adhesionDistance, 0.005f, nullptr, nullptr, "%.3f");
+    solverParams.adhesionDistance = std::max(solverParams.adhesionDistance, 0.0);
 
     ImGui::End();
 

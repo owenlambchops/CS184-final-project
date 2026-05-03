@@ -371,6 +371,7 @@ void App::render() {
             planeTiltParams_.axisScaleZ,
             gravityLikeForce_,
             sim_->mergeSplitController());
+        sim_->singleDropletSolver().params() = solverParams_;
         if (actions.setPlaneSideLength && planeSurface) {
             planeSurface->setSideLength(actions.planeSideLength);
         }
