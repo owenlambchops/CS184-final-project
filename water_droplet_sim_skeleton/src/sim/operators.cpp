@@ -143,6 +143,7 @@ void CollisionProjector::apply(
         double pushoutEps,
         double adhesionDist,
         double dt) const {
+        double dt) const {
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -151,7 +152,9 @@ void CollisionProjector::apply(
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
         if (s.signedDistance < adhesionDist) {
+        if (s.signedDistance < adhesionDist) {
             // 1) Project penetrated vertex to the closest point on the solid.
+            X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
 
@@ -239,22 +242,14 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    if (X.rows() == 0 || dt <= 0.0) return;
 
-    auto neighbours = buildNeighbours(drop.faces(), X.rows());
-    Weights w = computeCotangentWeights(X, drop.faces());
-    MatX3d deltaX = computeLaplacian(X, neighbours, w);
+    const auto neighbours = buildNeighbours(drop.faces(), X.rows());
+    const Weights w = computeCotangentWeights(X, drop.faces());
+    const MatX3d lapX = computeLaplacian(X, neighbours, w);
 
-    const double gamma = drop.material().surfaceTension;
-    const double density = std::max(drop.material().density, 1e-8);
-    for (int i = 0; i < X.rows(); ++i) {
-        const Vec3 dxi = deltaX.row(i).transpose();
-        if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
-
-        // Convert curvature proxy into acceleration and integrate to velocity.
-        const Vec3 fSt = gamma * dxi;
-        const Vec3 aSt = fSt / density;
-        U.row(i) += (aSt * dt).transpose();
-    }
+    const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
+    U += scale * lapX;
 }
 
 // Contact-angle hysteresis operator near the contact line.
