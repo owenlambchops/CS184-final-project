@@ -219,6 +219,7 @@ void App::restartSimulation() {
     buildDefaultScene();
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
     planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
+    interactionsEnabled_ = true;
     singleStepRequested_ = false;
 }
 
@@ -328,10 +329,10 @@ void App::update() {
         cameraRightDragActive_ = false;
     }
 
-    if (!imguiWantsMouse && dragInteractor_ && input_) {
+    if (interactionsEnabled_ && !imguiWantsMouse && dragInteractor_ && input_) {
         dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
     }
-    if (!imguiWantsMouse && planeTiltInteractor_ && input_) {
+    if (interactionsEnabled_ && !imguiWantsMouse && planeTiltInteractor_ && input_) {
         planeTiltInteractor_->update(input_->state(), width_, height_, dt, scene_, planeTiltParams_);
     }
 
@@ -378,6 +379,12 @@ void App::render() {
         if (actions.setPlaneTiltResponsiveness) planeTiltParams_.responsiveness = actions.planeTiltResponsiveness;
         if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
         if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
+        if (actions.resetPlaneAndDisableInteraction) {
+            if (planeSurface) planeSurface->setNormal(Vec3::UnitY());
+            planeTiltParams_.enabled = false;
+            interactionsEnabled_ = false;
+            if (dragField_) dragField_->setActive(false);
+        }
         if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
         if (actions.applyGravity) {
             gravityLikeForce_ = actions.gravityForce;

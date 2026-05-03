@@ -81,6 +81,7 @@ private:
     double lastCameraMouseY_ = 0.0;
     double lastFrameTimeSec_ = 0.0;
     double cameraScrollVelocity_ = 0.0;
+    bool interactionsEnabled_ = true;
     PlaneTiltParams planeTiltParams_;
 };
 

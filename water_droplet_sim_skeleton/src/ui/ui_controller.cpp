@@ -106,6 +106,9 @@ UiActions UiController::draw(SolverParams&,
         actions.setPlaneTiltAxisScaleZ = true;
         actions.planeTiltAxisScaleZ = tiltAxisScaleZ;
     }
+    if (ImGui::Button("Reset Plane + Disable Interaction")) {
+        actions.resetPlaneAndDisableInteraction = true;
+    }
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Glass IOR", ImGuiDataType_Double, &surfaceRender.ior, 0.01f, nullptr, nullptr, "%.3f");
     ImGui::SetNextItemWidth(vectorInputWidth);

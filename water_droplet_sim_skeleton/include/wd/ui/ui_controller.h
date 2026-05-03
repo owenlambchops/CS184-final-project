@@ -8,7 +8,7 @@ struct UiActions {
     bool createDroplet = false;
     Vec3 spawnAnchor = Vec3::Zero();
     bool applyGravity = false;
-    Vec3 gravityForce = Vec3::Zero();
+    Vec3 gravityForce = Vec3(0.0, -9.81, 0.0);
     bool saveScreenshot = false;
     bool setPlaneSideLength = false;
     double planeSideLength = 0.0;
@@ -22,6 +22,7 @@ struct UiActions {
     double planeTiltAxisScaleX = 1.0;
     bool setPlaneTiltAxisScaleZ = false;
     double planeTiltAxisScaleZ = 1.0;
+    bool resetPlaneAndDisableInteraction = false;
 };
 
 class UiController {
@@ -42,8 +43,8 @@ public:
 
 private:
     Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
-    Vec3 gravityDraft_ = Vec3::Zero();
-    bool gravityDraftInitialized_ = false;
+    Vec3 gravityDraft_ = Vec3(0.0, -9.81, 0.0);
+    bool gravityDraftInitialized_ = true;
 };
 
 } // namespace wd
