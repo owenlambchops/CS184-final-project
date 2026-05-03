@@ -108,6 +108,176 @@ double computeMeanEdgeLength(const Droplet& drop) {
     return sumLen / static_cast<double>(edgeCount);
 }
 
+bool faceContainsEdge(const Eigen::Vector3i& f, int a, int b) {
+    int hits = 0;
+    for (int k = 0; k < 3; ++k) {
+        if (f[k] == a || f[k] == b) ++hits;
+    }
+    return hits == 2;
+}
+
+bool replaceVertexInFace(Eigen::Vector3i& f, int oldV, int newV) {
+    bool changed = false;
+    for (int k = 0; k < 3; ++k) {
+        if (f[k] == oldV) {
+            f[k] = newV;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool isDegenerateFace(const Eigen::Vector3i& f) {
+    return (f[0] == f[1]) || (f[1] == f[2]) || (f[2] == f[0]);
+}
+
+void compactMeshData(Droplet& drop) {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    auto& F = drop.faces();
+
+    std::vector<Eigen::Vector3i> keptFaces;
+    keptFaces.reserve(static_cast<size_t>(F.rows()));
+    for (int i = 0; i < F.rows(); ++i) {
+        const Eigen::Vector3i fi = F.row(i);
+        if (!isDegenerateFace(fi)) keptFaces.push_back(fi);
+    }
+
+    std::vector<char> used(static_cast<size_t>(X.rows()), 0);
+    for (const auto& f : keptFaces) {
+        used[static_cast<size_t>(f[0])] = 1;
+        used[static_cast<size_t>(f[1])] = 1;
+        used[static_cast<size_t>(f[2])] = 1;
+    }
+
+    std::vector<int> map(static_cast<size_t>(X.rows()), -1);
+    int newCount = 0;
+    for (int i = 0; i < X.rows(); ++i) {
+        if (used[static_cast<size_t>(i)]) map[static_cast<size_t>(i)] = newCount++;
+    }
+
+    MatX3d Xn = MatX3d::Zero(newCount, 3);
+    MatX3d Un = MatX3d::Zero(newCount, 3);
+    for (int i = 0; i < X.rows(); ++i) {
+        const int ni = map[static_cast<size_t>(i)];
+        if (ni < 0) continue;
+        Xn.row(ni) = X.row(i);
+        Un.row(ni) = U.row(i);
+    }
+
+    MatX3i Fn(static_cast<int>(keptFaces.size()), 3);
+    for (int i = 0; i < static_cast<int>(keptFaces.size()); ++i) {
+        Fn(i, 0) = map[static_cast<size_t>(keptFaces[static_cast<size_t>(i)][0])];
+        Fn(i, 1) = map[static_cast<size_t>(keptFaces[static_cast<size_t>(i)][1])];
+        Fn(i, 2) = map[static_cast<size_t>(keptFaces[static_cast<size_t>(i)][2])];
+    }
+
+    X = std::move(Xn);
+    U = std::move(Un);
+    F = std::move(Fn);
+    drop.edges().clear();
+}
+
+bool splitLongestEdge(Droplet& drop, double splitLen) {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    auto& F = drop.faces();
+    const auto& E = drop.edges();
+    if (E.empty()) return false;
+
+    int bestI = -1;
+    int bestJ = -1;
+    double bestLen = splitLen;
+    for (const auto& e : E) {
+        const int i = e.x();
+        const int j = e.y();
+        if (i < 0 || j < 0 || i >= X.rows() || j >= X.rows()) continue;
+        const double len = (X.row(i).transpose() - X.row(j).transpose()).norm();
+        if (len > bestLen) {
+            bestLen = len;
+            bestI = i;
+            bestJ = j;
+        }
+    }
+    if (bestI < 0 || bestJ < 0) return false;
+
+    const int n = X.rows();
+    MatX3d Xn(n + 1, 3);
+    MatX3d Un(n + 1, 3);
+    Xn.topRows(n) = X;
+    Un.topRows(n) = U;
+    Xn.row(n) = 0.5 * (X.row(bestI) + X.row(bestJ));
+    Un.row(n) = 0.5 * (U.row(bestI) + U.row(bestJ));
+    X = std::move(Xn);
+    U = std::move(Un);
+
+    std::vector<Eigen::Vector3i> facesOut;
+    facesOut.reserve(static_cast<size_t>(F.rows()) + 8);
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        Eigen::Vector3i f = F.row(fi);
+        if (!faceContainsEdge(f, bestI, bestJ)) {
+            facesOut.push_back(f);
+            continue;
+        }
+
+        int k = -1;
+        for (int t = 0; t < 3; ++t) {
+            if (f[t] != bestI && f[t] != bestJ) {
+                k = f[t];
+                break;
+            }
+        }
+        if (k < 0) continue;
+        facesOut.emplace_back(bestI, n, k);
+        facesOut.emplace_back(n, bestJ, k);
+    }
+
+    MatX3i Fn(static_cast<int>(facesOut.size()), 3);
+    for (int i = 0; i < static_cast<int>(facesOut.size()); ++i) Fn.row(i) = facesOut[static_cast<size_t>(i)];
+    F = std::move(Fn);
+    drop.edges().clear();
+    return true;
+}
+
+bool collapseShortestEdge(Droplet& drop, double collapseLen) {
+    auto& X = drop.positions();
+    auto& U = drop.velocities();
+    auto& F = drop.faces();
+    const auto& E = drop.edges();
+    if (E.empty()) return false;
+
+    int bestI = -1;
+    int bestJ = -1;
+    double bestLen = collapseLen;
+    for (const auto& e : E) {
+        const int i = e.x();
+        const int j = e.y();
+        if (i < 0 || j < 0 || i >= X.rows() || j >= X.rows()) continue;
+        const double len = (X.row(i).transpose() - X.row(j).transpose()).norm();
+        if (len < bestLen) {
+            bestLen = len;
+            bestI = i;
+            bestJ = j;
+        }
+    }
+    if (bestI < 0 || bestJ < 0) return false;
+    if (bestI == bestJ) return false;
+    if (bestI > bestJ) std::swap(bestI, bestJ);
+
+    X.row(bestI) = 0.5 * (X.row(bestI) + X.row(bestJ));
+    U.row(bestI) = 0.5 * (U.row(bestI) + U.row(bestJ));
+
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        Eigen::Vector3i f = F.row(fi);
+        if (replaceVertexInFace(f, bestJ, bestI)) {
+            F.row(fi) = f;
+        }
+    }
+
+    compactMeshData(drop);
+    return true;
+}
+
 } // namespace
 
 void ExternalForceOperator::apply(
@@ -319,6 +489,29 @@ void VertexRepulsionOperator::apply(
         const double an = ai.norm();
         if (accelCap > 0.0 && an > accelCap) ai *= accelCap / std::max(an, 1e-8);
         U.row(i) += (ai * dt).transpose();
+    }
+}
+
+void AdaptiveRemesher::apply(
+        Droplet& drop,
+        double targetLen,
+        double splitThresh,
+        double collapseThresh,
+        int maxOps) const {
+    if (maxOps <= 0) return;
+    if (drop.positions().rows() < 4 || drop.faces().rows() < 4) return;
+
+    const double baseLen = (targetLen > 1e-8) ? targetLen : std::max(computeMeanEdgeLength(drop), 1e-8);
+    const double splitLen = std::max(baseLen * splitThresh, 1e-8);
+    const double collapseLen = std::max(baseLen * collapseThresh, 1e-8);
+    if (collapseLen >= splitLen) return;
+
+    for (int op = 0; op < maxOps; ++op) {
+        drop.updateDerived();
+        bool changed = splitLongestEdge(drop, splitLen);
+        if (!changed) changed = collapseShortestEdge(drop, collapseLen);
+        if (!changed) break;
+        compactMeshData(drop);
     }
 }
 

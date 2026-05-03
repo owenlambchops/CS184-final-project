@@ -43,12 +43,9 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             drop.updateDerived();
             volume_.apply(drop, surface, dt);
         }
-        // TODO(remesh-step2): Insert topology-changing remesh pass here (split/collapse/flip).
-        // Suggested order:
-        // 1) split long edges
-        // 2) collapse short edges
-        // 3) optional edge flips for valence quality
-        // 4) rebuild edges + remove degenerate faces + updateDerived()
+        // CGL-style dynamic remeshing replaces the previous short-edge repulsion.
+        const double targetLen = std::max(drop.derived().restMeanEdgeLength, 1e-6);
+        remesher_.apply(drop, targetLen, 4.0 / 3.0, 3.0 / 4.0, params_.remeshMaxOpsPerSubstep);
 
         drop.updateDerived();
     }
@@ -66,14 +63,7 @@ MatX3d SingleDropletSolver::computeAcceleration(
 
     if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
     if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
-    if (params_.enableVertexRepulsion) {
-        repulsion_.apply(
-                internalDrop,
-                1.0,
-                params_.vertexRepulsionTargetRatio,
-                params_.vertexRepulsionStrength,
-                params_.vertexRepulsionMaxAccel);
-    }
+    (void)surface;
 
     MatX3d aInternal = internalDrop.velocities();
     const double maxA = std::max(params_.maxInternalAccel, 0.0);
