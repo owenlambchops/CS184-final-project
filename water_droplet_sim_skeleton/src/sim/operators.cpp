@@ -239,6 +239,7 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    const auto& N = drop.derived().vertexNormals;
     if (X.rows() == 0 || dt <= 0.0) return;
 
     const auto neighbours = buildNeighbours(drop.faces(), X.rows());
@@ -247,6 +248,37 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
     const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
     U += scale * lapX;
+
+    // Small tangential redistribution to one-ring neighbors:
+    // closer neighbors get stronger effect via inverse edge-length weighting.
+    constexpr double kTangentialNeighborGain = 0.12;
+    for (int i = 0; i < X.rows(); ++i) {
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+
+        const Vec3 li = lapX.row(i).transpose();
+        const double lapMag = li.norm();
+        if (!std::isfinite(lapMag) || lapMag <= 1e-12) continue;
+
+        for (int j : neighbours[static_cast<size_t>(i)]) {
+            if (j < 0 || j >= U.rows() || j == i) continue;
+
+            Vec3 edge = X.row(j).transpose() - X.row(i).transpose();
+            const double edgeLen = edge.norm();
+            if (edgeLen <= 1e-8) continue;
+
+            Vec3 tangentDir = edge - edge.dot(ni) * ni;
+            const double tn = tangentDir.norm();
+            if (tn <= 1e-12) continue;
+            tangentDir /= tn;
+
+            const double weight = 1.0 / edgeLen; // stronger when closer
+            const Vec3 dv = (kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
+            U.row(j) += dv.transpose();
+        }
+    }
 }
 
 // Contact-angle hysteresis operator near the contact line.
