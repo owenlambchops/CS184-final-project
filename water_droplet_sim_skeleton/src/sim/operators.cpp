@@ -239,6 +239,7 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    const auto& N = drop.derived().vertexNormals;
 
     auto neighbours = buildNeighbours(drop.faces(), X.rows());
     Weights w = computeCotangentWeights(X, drop.faces());
@@ -246,6 +247,9 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
     const double gamma = drop.material().surfaceTension;
     const double density = std::max(drop.material().density, 1e-8);
+    constexpr double kNeighbourTangentialGain = 0.08; // small coupling to avoid overpowering curvature flow
+
+    MatX3d tangentialNeighbourDeltaU = MatX3d::Zero(U.rows(), 3);
     for (int i = 0; i < X.rows(); ++i) {
         const Vec3 dxi = deltaX.row(i).transpose();
         if (!std::isfinite(dxi.x()) || !std::isfinite(dxi.y()) || !std::isfinite(dxi.z())) continue;
@@ -254,7 +258,39 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
         const Vec3 fSt = gamma * dxi;
         const Vec3 aSt = fSt / density;
         U.row(i) += (aSt * dt).transpose();
+
+        // Secondary effect: spread/contraction along the local tangent plane.
+        // Signed curvature proxy:
+        //   + -> outward tendency, so neighbors are nudged tangentially away.
+        //   - -> inward tendency, so neighbors are nudged tangentially inward.
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+
+        const double signedCurvature = dxi.dot(ni);
+        const auto& oneRing = neighbours[static_cast<size_t>(i)];
+        if (oneRing.empty() || std::abs(signedCurvature) <= 1e-12) continue;
+
+        const double spreadSpeed =
+            kNeighbourTangentialGain * (gamma * std::abs(signedCurvature) / density) * dt;
+        if (!std::isfinite(spreadSpeed) || spreadSpeed <= 0.0) continue;
+
+        const double sign = signedCurvature >= 0.0 ? 1.0 : -1.0;
+        const double perNeighbour = spreadSpeed / static_cast<double>(oneRing.size());
+        for (int j : oneRing) {
+            if (j < 0 || j >= X.rows()) continue;
+            Vec3 rij = X.row(j).transpose() - X.row(i).transpose();
+            // Keep this redistribution tangential to the local surface frame.
+            Vec3 tangentDir = rij - rij.dot(ni) * ni;
+            const double tn = tangentDir.norm();
+            if (tn <= 1e-12) continue;
+            tangentDir /= tn;
+            tangentialNeighbourDeltaU.row(j) += (sign * perNeighbour * tangentDir).transpose();
+        }
     }
+
+    U += tangentialNeighbourDeltaU;
 }
 
 // Contact-angle hysteresis operator near the contact line.
