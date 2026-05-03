@@ -131,7 +131,8 @@ void main() {
     }
     if (uDebugView == kDebugWireframe) {
         float wire = wireframeFromDropletDepth();
-        FragColor = vec4(vec3(wire), 1.0);
+        vec3 edgeColor = vec3(0.15, 0.95, 0.85);
+        FragColor = vec4(wire * edgeColor, 1.0);
         return;
     }
 
