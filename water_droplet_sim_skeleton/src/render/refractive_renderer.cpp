@@ -834,35 +834,43 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera&
 
     if (scene.hasSurface() && supportSurfaceShader_.id() != 0 &&
         surfaceVao_ != 0 && surfaceIndexCount_ > 0) {
-        const SurfaceRenderParams& surfaceRender = scene.surface().renderParams();
-
         supportSurfaceShader_.use();
-        supportSurfaceShader_.setInt("uEnvironmentMap", 0);
         supportSurfaceShader_.setInt("uCausticMap", 1);
+        supportSurfaceShader_.setInt("uDropletShadowDepth", 2);
         supportSurfaceShader_.setMat4("uModel", matrices.model);
         supportSurfaceShader_.setMat4("uView", matrices.view);
         supportSurfaceShader_.setMat4("uProj", matrices.proj);
-        supportSurfaceShader_.setVec3("uCameraPos", matrices.eye);
-        supportSurfaceShader_.setFloat("uIor", static_cast<float>(surfaceRender.ior));
-        supportSurfaceShader_.setFloat("uOpacity", static_cast<float>(surfaceRender.opacity));
-        supportSurfaceShader_.setVec3("uTintColor", toGlm(surfaceRender.tintColor));
+        supportSurfaceShader_.setFloat("uOpacity", static_cast<float>(scene.surface().renderParams().opacity));
+        supportSurfaceShader_.setVec3("uLightDir", toGlm(causticSunDir_));
 
         const auto* plane = dynamic_cast<const PlaneSurface*>(&scene.surface());
         const bool useCaustics = params.enableCaustics && causticTex_ != 0 && plane != nullptr;
         supportSurfaceShader_.setInt("uEnableCaustics", useCaustics ? 1 : 0);
+        bool useShadows = false;
         if (plane != nullptr) {
             supportSurfaceShader_.setVec3("uPlaneOrigin", toGlm(plane->origin()));
             supportSurfaceShader_.setVec3("uPlaneTangentU", toGlm(plane->tangentU()));
             supportSurfaceShader_.setVec3("uPlaneTangentV", toGlm(plane->tangentV()));
             supportSurfaceShader_.setFloat("uPlaneSideLength", static_cast<float>(plane->sideLength()));
+
+            if (causticSunDirValid_ && lightDropletDepthTex_ != 0 && !scene.droplets().empty()) {
+                const CausticFrame frame = buildCausticFrame(*plane, causticSunDir_);
+                if (frame.valid) {
+                    supportSurfaceShader_.setMat4("uLightViewProj", frame.proj * frame.view);
+                    useShadows = true;
+                }
+            }
         } else {
             supportSurfaceShader_.setFloat("uPlaneSideLength", 0.0f);
         }
+        supportSurfaceShader_.setInt("uEnableShadows", useShadows ? 1 : 0);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, environmentTex_);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, causticTex_);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, lightDropletDepthTex_);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -870,6 +878,8 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera&
         glDrawElements(GL_TRIANGLES, surfaceIndexCount_, GL_UNSIGNED_INT, nullptr);
         glBindVertexArray(0);
         glDisable(GL_BLEND);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE0);
