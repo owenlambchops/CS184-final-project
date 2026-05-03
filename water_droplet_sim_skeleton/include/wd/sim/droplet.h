@@ -27,6 +27,7 @@ public:
 
     double targetVolume() const { return targetVolume_; }
     void setTargetVolume(double v) { targetVolume_ = v; }
+    int initialVertexCount() const { return initialVertexCount_; }
 
     const DropletDerivedData& derived() const { return derived_; }
     DropletDerivedData& derived() { return derived_; }
@@ -49,6 +50,7 @@ private:
     std::vector<int> boundaryLoop_;
     MaterialParams material_;
     double targetVolume_ = 0.0;
+    int initialVertexCount_ = 0;
     DropletDerivedData derived_;
 };
 

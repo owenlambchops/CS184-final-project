@@ -43,13 +43,14 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             drop.updateDerived();
             volume_.apply(drop, surface, dt);
         }
-        // CGL-style dynamic remeshing replaces the previous short-edge repulsion.
-        const double targetLen = std::max(drop.derived().restMeanEdgeLength, 1e-6);
-        remesher_.apply(drop, targetLen, 4.0 / 3.0, 3.0 / 4.0, params_.remeshMaxOpsPerSubstep);
-
         drop.updateDerived();
     }
 
+    // Remesh exactly once per solver step, after all per-substep operators.
+    const double targetLen = std::max(drop.derived().restMeanEdgeLength, 1e-6);
+    const int baseVertices = std::max(1, drop.initialVertexCount());
+    const int maxVertices = static_cast<int>(std::floor(1.5 * static_cast<double>(baseVertices)));
+    remesher_.apply(drop, targetLen, 4.0 / 3.0, 3.0 / 4.0, params_.remeshMaxOpsPerSubstep, maxVertices);
     drop.updateDerived();
 }
 

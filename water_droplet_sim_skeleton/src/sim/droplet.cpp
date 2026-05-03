@@ -11,6 +11,7 @@ namespace wd {
 Droplet::Droplet(int id, std::shared_ptr<const DropletTemplate> tpl, const MaterialParams& material)
     : id_(id), tpl_(std::move(tpl)), material_(material) {
     X_ = tpl_->restVertices();
+    initialVertexCount_ = static_cast<int>(X_.rows());
     U_ = MatX3d::Zero(X_.rows(), 3);
     F_ = tpl_->faces();
     E_ = tpl_->edges();

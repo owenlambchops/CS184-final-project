@@ -43,7 +43,13 @@ public:
 
 class AdaptiveRemesher {
 public:
-    void apply(Droplet& drop, double targetLen, double splitThresh, double collapseThresh, int maxOps) const;
+    void apply(
+            Droplet& drop,
+            double targetLen,
+            double splitThresh,
+            double collapseThresh,
+            int maxOps,
+            int maxVertices) const;
 };
 
 } // namespace wd

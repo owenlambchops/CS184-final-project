@@ -497,7 +497,8 @@ void AdaptiveRemesher::apply(
         double targetLen,
         double splitThresh,
         double collapseThresh,
-        int maxOps) const {
+        int maxOps,
+        int maxVertices) const {
     if (maxOps <= 0) return;
     if (drop.positions().rows() < 4 || drop.faces().rows() < 4) return;
 
@@ -508,7 +509,9 @@ void AdaptiveRemesher::apply(
 
     for (int op = 0; op < maxOps; ++op) {
         drop.updateDerived();
-        bool changed = splitLongestEdge(drop, splitLen);
+        bool changed = false;
+        const bool canSplit = (maxVertices <= 0) || (drop.positions().rows() < maxVertices);
+        if (canSplit) changed = splitLongestEdge(drop, splitLen);
         if (!changed) changed = collapseShortestEdge(drop, collapseLen);
         if (!changed) break;
         compactMeshData(drop);
