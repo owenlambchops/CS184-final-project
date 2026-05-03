@@ -131,6 +131,57 @@ bool isDegenerateFace(const Eigen::Vector3i& f) {
     return (f[0] == f[1]) || (f[1] == f[2]) || (f[2] == f[0]);
 }
 
+double faceArea(const MatX3d& X, const Eigen::Vector3i& f) {
+    const Vec3 a = X.row(f[0]).transpose();
+    const Vec3 b = X.row(f[1]).transpose();
+    const Vec3 c = X.row(f[2]).transpose();
+    return 0.5 * ((b - a).cross(c - a)).norm();
+}
+
+int64_t undirectedEdgeKey(int a, int b) {
+    const int lo = std::min(a, b);
+    const int hi = std::max(a, b);
+    return (static_cast<int64_t>(lo) << 32) | static_cast<uint32_t>(hi);
+}
+
+int64_t faceSetKey(const Eigen::Vector3i& f) {
+    std::array<int, 3> s = {f[0], f[1], f[2]};
+    std::sort(s.begin(), s.end());
+    const int64_t a = static_cast<int64_t>(s[0]) & 0x1FFFFF;
+    const int64_t b = static_cast<int64_t>(s[1]) & 0x1FFFFF;
+    const int64_t c = static_cast<int64_t>(s[2]) & 0x1FFFFF;
+    return (a << 42) | (b << 21) | c;
+}
+
+bool isTopologyConsistent(const Droplet& drop) {
+    const auto& F = drop.faces();
+    const auto& X = drop.positions();
+    if (F.rows() == 0 || X.rows() == 0) return false;
+
+    std::map<int64_t, int> edgeCounts;
+    std::set<int64_t> uniqueFaces;
+    for (int i = 0; i < F.rows(); ++i) {
+        const Eigen::Vector3i f = F.row(i);
+        if (isDegenerateFace(f)) return false;
+        if (f[0] < 0 || f[1] < 0 || f[2] < 0) return false;
+        if (f[0] >= X.rows() || f[1] >= X.rows() || f[2] >= X.rows()) return false;
+        if (faceArea(X, f) <= 1e-14) return false;
+
+        const int64_t fk = faceSetKey(f);
+        if (!uniqueFaces.insert(fk).second) return false;
+
+        edgeCounts[undirectedEdgeKey(f[0], f[1])] += 1;
+        edgeCounts[undirectedEdgeKey(f[1], f[2])] += 1;
+        edgeCounts[undirectedEdgeKey(f[2], f[0])] += 1;
+    }
+
+    for (const auto& kv : edgeCounts) {
+        // Closed droplet mesh should be two-manifold: each undirected edge has 2 incident faces.
+        if (kv.second != 2) return false;
+    }
+    return true;
+}
+
 void compactMeshData(Droplet& drop) {
     auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -138,9 +189,13 @@ void compactMeshData(Droplet& drop) {
 
     std::vector<Eigen::Vector3i> keptFaces;
     keptFaces.reserve(static_cast<size_t>(F.rows()));
+    std::set<int64_t> uniqueFaces;
     for (int i = 0; i < F.rows(); ++i) {
         const Eigen::Vector3i fi = F.row(i);
-        if (!isDegenerateFace(fi)) keptFaces.push_back(fi);
+        if (isDegenerateFace(fi)) continue;
+        if (faceArea(X, fi) <= 1e-14) continue;
+        if (!uniqueFaces.insert(faceSetKey(fi)).second) continue;
+        keptFaces.push_back(fi);
     }
 
     std::vector<char> used(static_cast<size_t>(X.rows()), 0);
@@ -219,17 +274,21 @@ bool splitLongestEdge(Droplet& drop, double splitLen) {
             facesOut.push_back(f);
             continue;
         }
-
-        int k = -1;
-        for (int t = 0; t < 3; ++t) {
-            if (f[t] != bestI && f[t] != bestJ) {
-                k = f[t];
-                break;
-            }
+        const int a = f[0];
+        const int b = f[1];
+        const int c = f[2];
+        if ((a == bestI && b == bestJ) || (a == bestJ && b == bestI)) {
+            facesOut.emplace_back(a, n, c);
+            facesOut.emplace_back(n, b, c);
+        } else if ((b == bestI && c == bestJ) || (b == bestJ && c == bestI)) {
+            facesOut.emplace_back(b, n, a);
+            facesOut.emplace_back(n, c, a);
+        } else if ((c == bestI && a == bestJ) || (c == bestJ && a == bestI)) {
+            facesOut.emplace_back(c, n, b);
+            facesOut.emplace_back(n, a, b);
+        } else {
+            facesOut.push_back(f);
         }
-        if (k < 0) continue;
-        facesOut.emplace_back(bestI, n, k);
-        facesOut.emplace_back(n, bestJ, k);
     }
 
     MatX3i Fn(static_cast<int>(facesOut.size()), 3);
@@ -509,12 +568,22 @@ void AdaptiveRemesher::apply(
 
     for (int op = 0; op < maxOps; ++op) {
         drop.updateDerived();
+        const MatX3d Xbak = drop.positions();
+        const MatX3d Ubak = drop.velocities();
+        const MatX3i Fbak = drop.faces();
         bool changed = false;
         const bool canSplit = (maxVertices <= 0) || (drop.positions().rows() < maxVertices);
         if (canSplit) changed = splitLongestEdge(drop, splitLen);
         if (!changed) changed = collapseShortestEdge(drop, collapseLen);
         if (!changed) break;
         compactMeshData(drop);
+        if (!isTopologyConsistent(drop)) {
+            drop.positions() = Xbak;
+            drop.velocities() = Ubak;
+            drop.faces() = Fbak;
+            drop.edges().clear();
+            break;
+        }
     }
 }
 
