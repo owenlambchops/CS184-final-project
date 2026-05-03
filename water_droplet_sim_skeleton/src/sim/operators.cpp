@@ -261,6 +261,7 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
         const Vec3 li = lapX.row(i).transpose();
         const double lapMag = li.norm();
         if (!std::isfinite(lapMag) || lapMag <= 1e-12) continue;
+        const double curvatureSign = li.dot(ni) >= 0.0 ? 1.0 : -1.0;
 
         for (int j : neighbours[static_cast<size_t>(i)]) {
             if (j < 0 || j >= U.rows() || j == i) continue;
@@ -275,7 +276,8 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
             tangentDir /= tn;
 
             const double weight = 1.0 / edgeLen; // stronger when closer
-            const Vec3 dv = (kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
+            const Vec3 dv =
+                (curvatureSign * kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
             U.row(j) += dv.transpose();
         }
     }
