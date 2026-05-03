@@ -61,13 +61,8 @@ struct MaterialParams {
     double viscousDamping = 0.50;          // mu
     double laplacianViscosity = 0.30;      // eta
     double density = 1.0;
-    double contactStiffness = 0.10;         // alpha
-    double friction = 0.0;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = true;
-    // damping_gain=1.6, # Apply new robust damping
-    double advContactAngleDeg = 95.0;      // theta_adv
-    double recContactAngleDeg = 70.0;      // theta_rec
 };
 
 struct SurfaceMaterialParams {
@@ -77,8 +72,6 @@ struct SurfaceMaterialParams {
     double advContactAngleDeg = 90.0;
     double recContactAngleDeg = 30.0;
     double contactStiffness = 0.5;
-
-    double adhesionDistance = 0.05;
 };
 
 struct SurfaceRenderParams {

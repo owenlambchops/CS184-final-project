@@ -146,7 +146,7 @@ void CollisionProjector::apply(
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
-    const double eps = std::max(0.0, drop.material().friction);
+    const double eps = std::max(0.0, surface.material().friction);
 
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
@@ -290,9 +290,10 @@ void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double d
     const auto& X = drop.positions();
     const auto& N = drop.derived().vertexNormals;
 
-    const double alpha = drop.material().contactStiffness;
-    const double receding = drop.material().recContactAngleDeg * kPi / 180.0;
-    const double advancing = drop.material().advContactAngleDeg * kPi / 180.0;
+    const SurfaceMaterialParams& surfaceMaterial = surface.material();
+    const double alpha = surfaceMaterial.contactStiffness;
+    const double receding = surfaceMaterial.recContactAngleDeg * kPi / 180.0;
+    const double advancing = surfaceMaterial.advContactAngleDeg * kPi / 180.0;
     const double density = std::max(drop.material().density, 1e-8);
 
     if (receding > advancing) return;
@@ -392,7 +393,6 @@ void ContactBandEdgeProjector::apply(
         int iterations,
         double relaxation) const {
     auto& X = drop.positions();
-    auto& U = drop.velocities();
     const auto& E = drop.edges();
     const int n = X.rows();
     if (n == 0 || E.empty()) return;
@@ -405,7 +405,6 @@ void ContactBandEdgeProjector::apply(
     const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
     const double targetLen = std::max(1e-8, targetRatio * meanEdge);
 
-    MatX3d XPrev = X;
     for (int it = 0; it < iters; ++it) {
         drop.updateDerived();
 
@@ -445,9 +444,6 @@ void ContactBandEdgeProjector::apply(
             X.row(j) -= corrJ.transpose();
         }
     }
-
-    // Convert projected position change to velocity so next step stays consistent.
-    U += (X - XPrev);
 }
 
 // Public wrapper for closed-volume estimate.
