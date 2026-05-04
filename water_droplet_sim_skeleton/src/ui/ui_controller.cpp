@@ -1,5 +1,6 @@
 #include "wd/ui/ui_controller.h"
 
+#include <imgui.h>
 #include <algorithm>
 
 namespace wd {
@@ -16,13 +17,10 @@ constexpr const char* kDebugViewLabels[] = {
     "Thickness",
     "Wireframe",
     "Caustics",
-    "Wireframe",
-    "Caustics",
 };
 
 } // namespace
 
-UiActions UiController::draw(SolverParams& solverParams,
 UiActions UiController::draw(SolverParams& solverParams,
                              RenderParams& renderParams,
                              MaterialParams& defaultMaterial,
@@ -117,17 +115,6 @@ UiActions UiController::draw(SolverParams& solverParams,
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalar("Caustic Point Size", ImGuiDataType_Double, &renderParams.causticPointSize, 0.05f, nullptr, nullptr, "%.3f");
     renderParams.causticPointSize = std::max(renderParams.causticPointSize, 0.1);
-
-        float absorption[3] = {
-            static_cast<float>(renderParams.absorptionColor.x()),
-            static_cast<float>(renderParams.absorptionColor.y()),
-            static_cast<float>(renderParams.absorptionColor.z()),
-        };
-        ImGui::SetNextItemWidth(vectorInputWidth);
-        if (ImGui::ColorEdit3("Absorption Color", absorption)) {
-            renderParams.absorptionColor = Vec3(absorption[0], absorption[1], absorption[2]);
-        }
-    }
 
     if (ImGui::CollapsingHeader("Surface")) {
         if (planeSideLength > 0.0) {

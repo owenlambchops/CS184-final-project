@@ -191,15 +191,6 @@ bool App::initializeImGui() {
     return true;
 }
 
-void App::shutdownImGui() {
-    if (!imguiInitialized_) return;
-
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-    imguiInitialized_ = false;
-}
-
 void App::initializeGlState() {
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.08f, 0.10f, 0.12f, 1.0f);
@@ -416,7 +407,7 @@ void App::render() {
         if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
         if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
         if (actions.resetPlaneAndDisableInteraction) {
-            if (planeSurface) planeSurface->setNormal(Vec3::UnitY());
+            restartSimulation();
             // Plane tilt and interaction always enabled
             interactionsEnabled_ = true;
             if (dragField_) dragField_->setActive(true);

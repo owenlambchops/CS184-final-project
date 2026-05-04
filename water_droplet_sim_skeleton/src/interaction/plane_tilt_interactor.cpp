@@ -40,9 +40,6 @@ void PlaneTiltInteractor::update(const InputState& input,
     const double response = std::max(params.responsiveness, 0.0);
     const double alpha = 1.0 - std::exp(-response * dt);
     const Vec3 blended = ((1.0 - alpha) * plane->normal() + alpha * targetNormal).normalized();
-
-    if (!std::isfinite(blended.x()) || !std::isfinite(blended.y()) || !std::isfinite(blended.z())) return;
-    plane->setNormal(blended);
 }
 
 } // namespace wd
