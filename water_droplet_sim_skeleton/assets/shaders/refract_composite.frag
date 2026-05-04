@@ -9,11 +9,14 @@ uniform sampler2D uSceneDepth;
 uniform sampler2D uDropletDepth;
 uniform sampler2D uDropletBackDepth;
 uniform sampler2D uCausticMap;
+uniform sampler2D uDropletShadowDepth;
 uniform mat4 uInvProj;
 uniform mat4 uInvView;
 uniform mat3 uInvViewRot;
 uniform int uEnableThickness;
+uniform int uEnableShadows;
 uniform int uDebugView;
+uniform mat4 uLightViewProj;
 uniform float uIor;
 uniform float uNearPlane;
 uniform float uFarPlane;
@@ -40,6 +43,7 @@ const int kDebugDropletNormal = 5;
 const int kDebugThickness = 6;
 const int kDebugWireframe = 7;
 const int kDebugCaustics = 8;
+const int kDebugDropletShadow = 9;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
@@ -110,6 +114,19 @@ float wireframeFromDropletDepth() {
     return smoothstep(0.0008, 0.004, edge);
 }
 
+float sampleDropletShadow(vec2 uv, float fragDepth, float bias) {
+    float shadowSum = 0.0;
+    vec2 texel = 1.0 / vec2(textureSize(uDropletShadowDepth, 0));
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 offset = vec2(float(x), float(y)) * texel;
+            float dropletDepth = texture(uDropletShadowDepth, uv + offset).r;
+            shadowSum += (dropletDepth + bias < fragDepth) ? 1.0 : 0.0;
+        }
+    }
+    return shadowSum / 9.0;
+}
+
 void main() {
     vec3 scene = texture(uSceneColor, vUv).rgb;
     vec2 ndc = vUv * 2.0 - 1.0;
@@ -170,6 +187,36 @@ void main() {
 
         float caustic = texture(uCausticMap, causticUv).r;
         FragColor = vec4(vec3(caustic), 1.0);
+        return;
+    }
+
+    if (uDebugView == kDebugDropletShadow) {
+        float sceneDepth = texture(uSceneDepth, vUv).r;
+        if (sceneDepth >= 0.9999 || uEnableShadows == 0) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        vec3 worldPosition = reconstructWorldPosition(vUv, sceneDepth);
+        vec4 lightClip = uLightViewProj * vec4(worldPosition, 1.0);
+        if (abs(lightClip.w) <= 1e-8) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        vec3 lightNdc = lightClip.xyz / lightClip.w;
+        vec2 shadowUv = lightNdc.xy * 0.5 + vec2(0.5);
+        float fragDepth = lightNdc.z * 0.5 + 0.5;
+        if (any(lessThan(shadowUv, vec2(0.0))) ||
+            any(greaterThan(shadowUv, vec2(1.0))) ||
+            fragDepth < 0.0 ||
+            fragDepth > 1.0) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+
+        float shadowFactor = sampleDropletShadow(shadowUv, fragDepth, 0.0015);
+        FragColor = vec4(vec3(shadowFactor), 1.0);
         return;
     }
 

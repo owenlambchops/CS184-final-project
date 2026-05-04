@@ -51,7 +51,8 @@ private:
     void releaseResources();
 
     void renderEnvironmentBackground(const Camera& camera);
-    void renderCaustics(const Scene& scene, const RenderParams& params);
+    void renderLightDropletBuffers(const Scene& scene);
+    void renderCausticMap(const Scene& scene, const RenderParams& params);
     void renderSceneColorDepth(const Scene& scene, const Camera& camera, const RenderParams& params);
     void renderDropletGBuffer(const Scene& scene, const Camera& camera);
     void renderDropletBackDepth(const Scene& scene, const Camera& camera);
@@ -91,6 +92,7 @@ private:
     unsigned int environmentTex_ = 0;
     Vec3 causticSunDir_ = Vec3::Zero();
     bool causticSunDirValid_ = false;
+    bool lightDropletBuffersValid_ = false;
 
     int surfaceIndexCount_ = 0;
     int width_ = 0;

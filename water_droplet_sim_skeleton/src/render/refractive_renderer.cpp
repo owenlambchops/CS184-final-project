@@ -264,7 +264,8 @@ RenderStats RefractiveRenderer::render(const Scene& scene, const Camera& camera,
     if (width_ > 0 && height_ > 0) {
         dropletCache_.sync(scene.droplets());
 
-        renderCaustics(scene, params);
+        renderLightDropletBuffers(scene);
+        renderCausticMap(scene, params);
         renderSceneColorDepth(scene, camera, params);
         renderDropletGBuffer(scene, camera);
         renderDropletBackDepth(scene, camera);
@@ -630,6 +631,7 @@ void RefractiveRenderer::releaseRenderTargets() {
     lightDropletBackDepthFbo_ = 0;
     causticTex_ = 0;
     causticFbo_ = 0;
+    lightDropletBuffersValid_ = false;
 
     sceneDepthTex_ = 0;
     sceneColorTex_ = 0;
@@ -696,7 +698,98 @@ void RefractiveRenderer::renderEnvironmentBackground(const Camera& camera) {
     glUseProgram(0);
 }
 
-void RefractiveRenderer::renderCaustics(const Scene& scene, const RenderParams& params) {
+void RefractiveRenderer::renderLightDropletBuffers(const Scene& scene) {
+    lightDropletBuffersValid_ = false;
+    if (lightDropletFbo_ == 0 || lightDropletBackDepthFbo_ == 0) return;
+
+    const std::array<float, 4> normalClear = {0.5f, 0.5f, 1.0f, 0.0f};
+    constexpr float depthClear = 1.0f;
+
+    const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+    GLint previousCullFace = GL_BACK;
+    glGetIntegerv(GL_CULL_FACE_MODE, &previousCullFace);
+    auto restoreCullState = [&]() {
+        glCullFace(static_cast<unsigned int>(previousCullFace));
+        if (cullWasEnabled) glEnable(GL_CULL_FACE);
+        else glDisable(GL_CULL_FACE);
+    };
+
+    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletFbo_);
+    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glClearBufferfv(GL_COLOR, 0, normalClear.data());
+    glClearBufferfv(GL_DEPTH, 0, &depthClear);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletBackDepthFbo_);
+    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glClearBufferfv(GL_DEPTH, 0, &depthClear);
+
+    if (!causticSunDirValid_ ||
+        !scene.hasSurface() ||
+        scene.droplets().empty() ||
+        dropletGBufferShader_.id() == 0) {
+        restoreCullState();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return;
+    }
+
+    const auto* plane = dynamic_cast<const PlaneSurface*>(&scene.surface());
+    if (plane == nullptr) {
+        restoreCullState();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return;
+    }
+
+    const CausticFrame frame = buildCausticFrame(*plane, causticSunDir_);
+    if (!frame.valid) {
+        restoreCullState();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletFbo_);
+    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+
+    dropletGBufferShader_.use();
+    dropletGBufferShader_.setMat4("uView", frame.view);
+    dropletGBufferShader_.setMat4("uProj", frame.proj);
+    for (const auto& droplet : scene.droplets()) {
+        dropletCache_.drawDroplet(droplet->id());
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletBackDepthFbo_);
+    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+
+    dropletGBufferShader_.use();
+    dropletGBufferShader_.setMat4("uView", frame.view);
+    dropletGBufferShader_.setMat4("uProj", frame.proj);
+    for (const auto& droplet : scene.droplets()) {
+        dropletCache_.drawDroplet(droplet->id());
+    }
+
+    restoreCullState();
+    lightDropletBuffersValid_ = true;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUseProgram(0);
+}
+
+void RefractiveRenderer::renderCausticMap(const Scene& scene, const RenderParams& params) {
     if (causticFbo_ == 0 || causticTex_ == 0) return;
 
     glBindFramebuffer(GL_FRAMEBUFFER, causticFbo_);
@@ -707,11 +800,9 @@ void RefractiveRenderer::renderCaustics(const Scene& scene, const RenderParams& 
 
     if (!params.enableCaustics ||
         params.causticStrength <= 0.0 ||
-        !causticSunDirValid_ ||
+        !lightDropletBuffersValid_ ||
         !scene.hasSurface() ||
-        scene.droplets().empty() ||
-        causticSplatShader_.id() == 0 ||
-        dropletGBufferShader_.id() == 0) {
+        causticSplatShader_.id() == 0) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return;
     }
@@ -727,49 +818,6 @@ void RefractiveRenderer::renderCaustics(const Scene& scene, const RenderParams& 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return;
     }
-
-    const GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
-    GLint previousCullFace = GL_BACK;
-    glGetIntegerv(GL_CULL_FACE_MODE, &previousCullFace);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletFbo_);
-    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-
-    const std::array<float, 4> normalClear = {0.5f, 0.5f, 1.0f, 0.0f};
-    constexpr float depthClear = 1.0f;
-    glClearBufferfv(GL_COLOR, 0, normalClear.data());
-    glClearBufferfv(GL_DEPTH, 0, &depthClear);
-
-    dropletGBufferShader_.use();
-    dropletGBufferShader_.setMat4("uView", frame.view);
-    dropletGBufferShader_.setMat4("uProj", frame.proj);
-    for (const auto& droplet : scene.droplets()) {
-        dropletCache_.drawDroplet(droplet->id());
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, lightDropletBackDepthFbo_);
-    glViewport(0, 0, kCausticMapSize, kCausticMapSize);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glClearBufferfv(GL_DEPTH, 0, &depthClear);
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
-
-    dropletGBufferShader_.use();
-    dropletGBufferShader_.setMat4("uView", frame.view);
-    dropletGBufferShader_.setMat4("uProj", frame.proj);
-    for (const auto& droplet : scene.droplets()) {
-        dropletCache_.drawDroplet(droplet->id());
-    }
-
-    glCullFace(static_cast<unsigned int>(previousCullFace));
-    if (!cullWasEnabled) glDisable(GL_CULL_FACE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, causticFbo_);
     glViewport(0, 0, kCausticMapSize, kCausticMapSize);
@@ -860,7 +908,7 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera&
             supportSurfaceShader_.setVec3("uPlaneTangentV", toGlm(plane->tangentV()));
             supportSurfaceShader_.setFloat("uPlaneSideLength", static_cast<float>(plane->sideLength()));
 
-            if (causticSunDirValid_ && lightDropletDepthTex_ != 0 && !scene.droplets().empty()) {
+            if (lightDropletBuffersValid_ && lightDropletDepthTex_ != 0) {
                 const CausticFrame frame = buildCausticFrame(*plane, causticSunDir_);
                 if (frame.valid) {
                     supportSurfaceShader_.setMat4("uLightViewProj", frame.proj * frame.view);
@@ -974,6 +1022,7 @@ void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& cam
         compositeShader_.setInt("uDropletDepth", 4);
         compositeShader_.setInt("uDropletBackDepth", 5);
         compositeShader_.setInt("uCausticMap", 6);
+        compositeShader_.setInt("uDropletShadowDepth", 7);
         compositeShader_.setInt("uEnableThickness", params.enableThickness ? 1 : 0);
         compositeShader_.setInt("uDebugView", static_cast<int>(params.debugView));
         compositeShader_.setMat4("uInvProj", glm::inverse(matrices.proj));
@@ -992,14 +1041,23 @@ void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& cam
         compositeShader_.setVec3("uAbsorptionColor", toGlm(params.absorptionColor));
 
         const auto* plane = scene.hasSurface() ? dynamic_cast<const PlaneSurface*>(&scene.surface()) : nullptr;
+        bool useShadows = false;
         if (plane != nullptr) {
             compositeShader_.setVec3("uPlaneOrigin", toGlm(plane->origin()));
             compositeShader_.setVec3("uPlaneTangentU", toGlm(plane->tangentU()));
             compositeShader_.setVec3("uPlaneTangentV", toGlm(plane->tangentV()));
             compositeShader_.setFloat("uPlaneSideLength", static_cast<float>(plane->sideLength()));
+            if (lightDropletBuffersValid_ && lightDropletDepthTex_ != 0) {
+                const CausticFrame frame = buildCausticFrame(*plane, causticSunDir_);
+                if (frame.valid) {
+                    compositeShader_.setMat4("uLightViewProj", frame.proj * frame.view);
+                    useShadows = true;
+                }
+            }
         } else {
             compositeShader_.setFloat("uPlaneSideLength", 0.0f);
         }
+        compositeShader_.setInt("uEnableShadows", useShadows ? 1 : 0);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sceneColorTex_);
@@ -1015,11 +1073,15 @@ void RefractiveRenderer::compositeDroplets(const Scene& scene, const Camera& cam
         glBindTexture(GL_TEXTURE_2D, dropletBackDepthTex_);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, causticTex_);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, useShadows ? lightDropletDepthTex_ : 0);
 
         glBindVertexArray(fullscreenVao_);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE5);
