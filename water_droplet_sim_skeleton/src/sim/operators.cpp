@@ -2,8 +2,6 @@
 #include "wd/sim/cgl_math.h"
 #include <algorithm>
 #include <cmath>
-#include <map>
-#include <set>
 
 namespace wd {
 namespace {
@@ -11,26 +9,6 @@ namespace {
 // Small numeric tolerance used for robust normalization/angle logic.
 constexpr double kEps = 1e-10;
 constexpr double kPi = 3.14159265358979323846;
-
-// Builds one-ring adjacency from triangle connectivity.
-// Each vertex stores unique neighboring vertex indices.
-std::vector<std::vector<int>> buildNeighbours(const MatX3i& faces, int n) {
-    std::vector<std::set<int>> adjSets(n);
-    for (int i = 0; i < faces.rows(); ++i) {
-        const int a = faces(i, 0);
-        const int b = faces(i, 1);
-        const int c = faces(i, 2);
-        adjSets[a].insert(b); adjSets[a].insert(c);
-        adjSets[b].insert(a); adjSets[b].insert(c);
-        adjSets[c].insert(a); adjSets[c].insert(b);
-    }
-
-    std::vector<std::vector<int>> neighbours(n);
-    for (int i = 0; i < n; ++i) {
-        neighbours[i] = std::vector<int>(adjSets[i].begin(), adjSets[i].end());
-    }
-    return neighbours;
-}
 
 Weights computeCotangentWeights(const MatX3d& x, const MatX3i& faces) {
     return computeCotangentWeightsCgl(toVec3List(x), toFaceList(faces));
@@ -88,31 +66,6 @@ std::vector<double> computeLumpedAreas(const Droplet& drop) {
         areas[i2] += share;
     }
     return areas;
-}
-
-double computeMeanEdgeLength(const Droplet& drop) {
-    const auto& X = drop.positions();
-    const auto& F = drop.faces();
-    double sumLen = 0.0;
-    int edgeCount = 0;
-
-    for (int fi = 0; fi < F.rows(); ++fi) {
-        const int i0 = F(fi, 0);
-        const int i1 = F(fi, 1);
-        const int i2 = F(fi, 2);
-
-        const Vec3 p0 = X.row(i0).transpose();
-        const Vec3 p1 = X.row(i1).transpose();
-        const Vec3 p2 = X.row(i2).transpose();
-
-        sumLen += (p1 - p0).norm();
-        sumLen += (p2 - p1).norm();
-        sumLen += (p0 - p2).norm();
-        edgeCount += 3;
-    }
-
-    if (edgeCount == 0) return 0.0;
-    return sumLen / static_cast<double>(edgeCount);
 }
 
 } // namespace

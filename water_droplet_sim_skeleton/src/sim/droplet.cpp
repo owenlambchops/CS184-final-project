@@ -1,9 +1,9 @@
 #include "wd/sim/droplet.h"
+#include "wd/sim/cgl_math.h"
 #include <Eigen/Eigenvalues>
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <set>
 #include <vector>
 
 namespace wd {
@@ -30,34 +30,15 @@ void Droplet::updateDerived() {
     const int n = static_cast<int>(X_.rows());
     if (n == 0) return;
 
-    // 1) Normals + closed volume.
-    const Vec3 com = X_.colwise().mean().transpose();
-    double volumeSigned = 0.0;
-    derived_.vertexNormals = MatX3d::Zero(n, 3);
     const auto& F = F_;
-
-    for (int i = 0; i < F.rows(); ++i) {
-        const int a = F(i, 0), b = F(i, 1), c = F(i, 2);
-        const Vec3 va = X_.row(a).transpose();
-        const Vec3 vb = X_.row(b).transpose();
-        const Vec3 vc = X_.row(c).transpose();
-
-        Vec3 fn = (vb - va).cross(vc - va);
-        if (fn.dot(va - com) < 0.0) fn = -fn;
-
-        volumeSigned += (va - com).dot((vb - com).cross(vc - com)) / 6.0;
-
-        derived_.vertexNormals.row(a) += fn.transpose();
-        derived_.vertexNormals.row(b) += fn.transpose();
-        derived_.vertexNormals.row(c) += fn.transpose();
-    }
-    derived_.currentVolume = std::abs(volumeSigned);
-
+    // 1) Normals + closed volume from shared geometry helper.
+    const auto [normals, volume] = computeVertexNormalsAndVolumeCgl(toVec3List(X_), toFaceList(F));
+    derived_.vertexNormals = MatX3d::Zero(n, 3);
     for (int i = 0; i < n; ++i) {
-        Vec3 normal = derived_.vertexNormals.row(i).transpose();
-        if (normal.norm() < 1e-12) normal = Vec3::UnitY();
-        derived_.vertexNormals.row(i) = normal.normalized().transpose();
+        derived_.vertexNormals.row(i) = normals[static_cast<size_t>(i)].transpose();
     }
+    derived_.currentVolume = volume;
+    const Vec3 com = X_.colwise().mean().transpose();
 
     // 2) Kinematics.
     derived_.centerOfMass = com;
@@ -71,21 +52,7 @@ void Droplet::updateDerived() {
     derived_.vertexMeanEdgeLength = Eigen::VectorXd::Zero(n);
     std::vector<int> edgeDegree(n, 0);
     // Fallback: if runtime edges are missing/stale, rebuild from faces.
-    if (E_.empty()) {
-        std::set<std::pair<int, int>> edgeSet;
-        auto addEdge = [&](int a, int b) {
-            if (a > b) std::swap(a, b);
-            edgeSet.emplace(a, b);
-        };
-        for (int fi = 0; fi < F.rows(); ++fi) {
-            addEdge(F(fi, 0), F(fi, 1));
-            addEdge(F(fi, 1), F(fi, 2));
-            addEdge(F(fi, 2), F(fi, 0));
-        }
-        E_.clear();
-        E_.reserve(edgeSet.size());
-        for (const auto& e : edgeSet) E_.emplace_back(e.first, e.second);
-    }
+    if (E_.empty()) E_ = buildUniqueEdgesFromFaces(F);
     const auto& E = E_;
 
     double minLen = std::numeric_limits<double>::infinity();
@@ -125,20 +92,14 @@ void Droplet::updateDerived() {
     }
 
     // 4) Curvature proxy from uniform Laplacian magnitude.
-    std::vector<std::set<int>> adj(n);
-    for (int fi = 0; fi < F.rows(); ++fi) {
-        const int a = F(fi, 0), b = F(fi, 1), c = F(fi, 2);
-        adj[a].insert(b); adj[a].insert(c);
-        adj[b].insert(a); adj[b].insert(c);
-        adj[c].insert(a); adj[c].insert(b);
-    }
+    const std::vector<std::vector<int>> adj = buildNeighbours(F, n);
 
     derived_.vertexCurvature = Eigen::VectorXd::Zero(n);
     for (int i = 0; i < n; ++i) {
-        if (adj[i].empty()) continue;
+        if (adj[static_cast<size_t>(i)].empty()) continue;
         Vec3 avg = Vec3::Zero();
-        for (int j : adj[i]) avg += X_.row(j).transpose();
-        avg /= static_cast<double>(adj[i].size());
+        for (int j : adj[static_cast<size_t>(i)]) avg += X_.row(j).transpose();
+        avg /= static_cast<double>(adj[static_cast<size_t>(i)].size());
         derived_.vertexCurvature(i) = (avg - X_.row(i).transpose()).norm();
     }
 
