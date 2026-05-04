@@ -57,7 +57,11 @@ UiActions UiController::draw(SolverParams& solverParams,
 
     ImGui::Separator();
     ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalarN("Gravity", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f");
+    if (ImGui::DragScalarN("Gravity", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f")) {
+        actions.applyGravity = true;
+        actions.gravityForce = gravityDraft_;
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Apply")) {
         actions.applyGravity = true;
         actions.gravityForce = gravityDraft_;
@@ -125,16 +129,47 @@ UiActions UiController::draw(SolverParams& solverParams,
                 actions.planeSideLength = std::max(editedSideLength, 0.1);
             }
         }
-        if (ImGui::Button("Reset Plane")) {
-            actions.resetPlaneAndDisableInteraction = true;
+        if (planeTiltEnabled) {
+            if (ImGui::Button("Disable & Reset Tilt")) {
+                actions.setPlaneTiltEnabled = true;
+                actions.planeTiltEnabled = false;
+                actions.resetPlaneTilt = true;
+            }
+        } else {
+            if (ImGui::Button("Enable Tilt")) {
+                actions.setPlaneTiltEnabled = true;
+                actions.planeTiltEnabled = true;
+            }
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Enable Tilt")) {
-            actions.resetPlaneAndDisableInteraction = false;
+
+        double editedMaxTiltDeg = planeTiltMaxDeg;
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::DragScalar("Max Tilt (deg)", ImGuiDataType_Double, &editedMaxTiltDeg, 0.1f, nullptr, nullptr, "%.2f")) {
+            actions.setPlaneTiltMaxDeg = true;
+            actions.planeTiltMaxDeg = std::clamp(editedMaxTiltDeg, 0.0, 30.0);
         }
-        if (ImGui::Button("Disable Tilt")) {
-            actions.disable_tilt = true;
+
+        double editedResponsiveness = planeTiltResponsiveness;
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::DragScalar("Tilt Response", ImGuiDataType_Double, &editedResponsiveness, 0.1f, nullptr, nullptr, "%.2f")) {
+            actions.setPlaneTiltResponsiveness = true;
+            actions.planeTiltResponsiveness = std::max(editedResponsiveness, 0.0);
         }
+
+        double editedAxisScaleX = planeTiltAxisScaleX;
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::DragScalar("Tilt Axis X", ImGuiDataType_Double, &editedAxisScaleX, 0.01f, nullptr, nullptr, "%.3f")) {
+            actions.setPlaneTiltAxisScaleX = true;
+            actions.planeTiltAxisScaleX = std::max(editedAxisScaleX, 0.0);
+        }
+
+        double editedAxisScaleZ = planeTiltAxisScaleZ;
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::DragScalar("Tilt Axis Z", ImGuiDataType_Double, &editedAxisScaleZ, 0.01f, nullptr, nullptr, "%.3f")) {
+            actions.setPlaneTiltAxisScaleZ = true;
+            actions.planeTiltAxisScaleZ = std::max(editedAxisScaleZ, 0.0);
+        }
+
         ImGui::SetNextItemWidth(vectorInputWidth);
         ImGui::DragScalar("Friction", ImGuiDataType_Double, &surfaceMaterial.friction, 0.01f, nullptr, nullptr, "%.3f");
         surfaceMaterial.friction = std::max(surfaceMaterial.friction, 0.0);

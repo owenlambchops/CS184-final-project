@@ -24,6 +24,7 @@ public:
     const Vec3& tangentU() const { return tangentU_; }
     const Vec3& tangentV() const { return tangentV_; }
     double sideLength() const { return sideLength_; }
+    void setNormal(const Vec3& normal);
     void setSideLength(double sideLength);
 
 private:

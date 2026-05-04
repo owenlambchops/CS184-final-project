@@ -21,10 +21,13 @@ struct UiActions {
     double planeTiltAxisScaleX = 1.0;
     bool setPlaneTiltAxisScaleZ = false;
     double planeTiltAxisScaleZ = 1.0;
+    bool setPlaneTiltEnabled = false;
+    bool planeTiltEnabled = true;
+    bool resetPlaneTilt = false;
     bool resetPlaneAndDisableInteraction = false;
     bool setMeshSubdivisions = false;
     int meshSubdivisions = 2;
-    bool disable_tilt = true;
+    bool disable_tilt = false;
 };
 
 class UiController {

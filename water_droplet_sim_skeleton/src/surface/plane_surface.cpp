@@ -101,6 +101,11 @@ SurfaceRenderMesh PlaneSurface::buildRenderMesh() const {
     return mesh;
 }
 
+void PlaneSurface::setNormal(const Vec3& normal) {
+    normal_ = safeNormalize(normal, Vec3::UnitY());
+    buildPlaneFrame(normal_, tangentU_, tangentV_);
+}
+
 void PlaneSurface::setSideLength(double sideLength) {
     sideLength_ = std::max(kMinSideLength, sideLength);
 }
