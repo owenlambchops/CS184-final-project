@@ -26,29 +26,30 @@ struct UiActions {
     bool setMeshSubdivisions = false;
     int meshSubdivisions = 2;
     bool disable_tilt = true;
+
+    // Plane tilt  ← NEW
+    bool tiltPlane      = false;
+    Vec3 planeNormal    = Vec3::UnitY();
 };
 
 class UiController {
 public:
-    UiActions draw(SolverParams& solverParams,
-                   RenderParams& renderParams,
-                   MaterialParams& defaultMaterial,
-                   SurfaceMaterialParams& surfaceMaterial,
-                   SurfaceRenderParams& surfaceRender,
-                   double planeSideLength,
-                   bool planeTiltEnabled,
-                   double planeTiltMaxDeg,
-                   double planeTiltResponsiveness,
-                   double planeTiltAxisScaleX,
-                   double planeTiltAxisScaleZ,
-                   const Vec3& gravityLikeForce,
-                   MergeSplitController& mergeSplit);
-
+    UiActions draw(SolverParams&          solverParams,
+                   RenderParams&          renderParams,
+                   MaterialParams&        defaultMaterial,
+                   const Vec3&            gravityLikeForce,
+                   MergeSplitController&  mergeSplit);
 private:
-    Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
-    Vec3 gravityDraft_ = Vec3(0.0, -9.81, 0.0);
-    bool gravityDraftInitialized_ = true;
-    int meshSubdivisions_ = 2;
+    Vec3   spawnAnchor_ = Vec3::Zero();
+    Vec3   gravityDraft_ = Vec3::Zero();
+    bool   gravityDraftInitialized_ = false;
+
+    // Plane tilt  ← NEW
+    double pitchDeg_ = 0.0;
+    double rollDeg_  = 0.0;
+    static constexpr double kTiltMin = -80.0;
+    static constexpr double kTiltMax =  80.0;
 };
 
-} // namespace wd
+// namespace wd
+};

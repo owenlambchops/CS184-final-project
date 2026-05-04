@@ -1,5 +1,7 @@
 #pragma once
 #include "wd/core/types.h"
+#include <memory>
+#include <vector>
 
 namespace wd {
 
@@ -48,6 +50,13 @@ public:
     void clear();
     Vec3 sample(const Vec3& worldPoint, double timeSec) const override;
 
+    template<typename T>
+    T* findField() {
+        for (auto& f : fields_) {
+            if (auto* p = dynamic_cast<T*>(f.get())) return p;
+        }
+        return nullptr;
+    }
 private:
     std::vector<std::shared_ptr<IForceField>> fields_;
 };
