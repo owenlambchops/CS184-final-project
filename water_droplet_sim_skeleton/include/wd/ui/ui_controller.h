@@ -46,7 +46,7 @@ public:
 
 private:
     Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
-    Vec3 gravityDraft_ = Vec3(0.0, -3.5, 0.0);
+    Vec3 gravityDraft_ = Vec3(0.0, -9.81, 0.0);
     bool gravityDraftInitialized_ = true;
     int meshSubdivisions_ = 2;
 };

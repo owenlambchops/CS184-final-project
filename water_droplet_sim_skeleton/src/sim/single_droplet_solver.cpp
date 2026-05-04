@@ -51,12 +51,9 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             drop.updateDerived();
             volume_.apply(drop, surface, dt);
         }
-        // TODO(remesh-step2): Insert topology-changing remesh pass here (split/collapse/flip).
-        // Suggested order:
-        // 1) split long edges
-        // 2) collapse short edges
-        // 3) optional edge flips for valence quality
-        // 4) rebuild edges + remove degenerate faces + updateDerived()
+
+        // add velocity damping
+        U -= params_.vertexDamping * U * dt;
 
         drop.updateDerived();
     }

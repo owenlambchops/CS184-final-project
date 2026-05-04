@@ -119,62 +119,70 @@ UiActions UiController::draw(SolverParams& solverParams,
     ImGui::DragScalar("Caustic Point Size", ImGuiDataType_Double, &renderParams.causticPointSize, 0.05f, nullptr, nullptr, "%.3f");
     renderParams.causticPointSize = std::max(renderParams.causticPointSize, 0.1);
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("Glass Surface");
-    if (planeSideLength > 0.0) {
-        double editedSideLength = planeSideLength;
+        float absorption[3] = {
+            static_cast<float>(renderParams.absorptionColor.x()),
+            static_cast<float>(renderParams.absorptionColor.y()),
+            static_cast<float>(renderParams.absorptionColor.z()),
+        };
         ImGui::SetNextItemWidth(vectorInputWidth);
-        if (ImGui::DragScalar("Plane Side Length", ImGuiDataType_Double, &editedSideLength, 0.05f, nullptr, nullptr, "%.3f")) {
-            actions.setPlaneSideLength = true;
-            actions.planeSideLength = std::max(editedSideLength, 0.1);
+        if (ImGui::ColorEdit3("Absorption Color", absorption)) {
+            renderParams.absorptionColor = Vec3(absorption[0], absorption[1], absorption[2]);
         }
     }
-    bool tiltEnabled = planeTiltEnabled;
-    if (ImGui::Checkbox("Enable Plane Tilt", &tiltEnabled)) {
-        actions.setPlaneTiltEnabled = true;
-        actions.planeTiltEnabled = tiltEnabled;
-    }
-    double maxTiltDeg = planeTiltMaxDeg;
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    if (ImGui::DragScalar("Max Tilt (deg)", ImGuiDataType_Double, &maxTiltDeg, 0.25f, nullptr, nullptr, "%.2f")) {
-        actions.setPlaneTiltMaxDeg = true;
-        actions.planeTiltMaxDeg = std::clamp(maxTiltDeg, 0.0, 30.0);
-    }
-    double tiltResponsiveness = planeTiltResponsiveness;
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    if (ImGui::DragScalar("Tilt Response", ImGuiDataType_Double, &tiltResponsiveness, 0.1f, nullptr, nullptr, "%.2f")) {
-        actions.setPlaneTiltResponsiveness = true;
-        actions.planeTiltResponsiveness = std::max(tiltResponsiveness, 0.0);
-    }
-    double tiltAxisScaleX = planeTiltAxisScaleX;
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    if (ImGui::DragScalar("Tilt X Scale", ImGuiDataType_Double, &tiltAxisScaleX, 0.05f, nullptr, nullptr, "%.2f")) {
-        actions.setPlaneTiltAxisScaleX = true;
-        actions.planeTiltAxisScaleX = tiltAxisScaleX;
-    }
-    double tiltAxisScaleZ = planeTiltAxisScaleZ;
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    if (ImGui::DragScalar("Tilt Z Scale", ImGuiDataType_Double, &tiltAxisScaleZ, 0.05f, nullptr, nullptr, "%.2f")) {
-        actions.setPlaneTiltAxisScaleZ = true;
-        actions.planeTiltAxisScaleZ = tiltAxisScaleZ;
-    }
-    if (ImGui::Button("Reset Plane + Disable Interaction")) {
-        actions.resetPlaneAndDisableInteraction = true;
-    }
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalar("Glass IOR", ImGuiDataType_Double, &surfaceRender.ior, 0.01f, nullptr, nullptr, "%.3f");
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalar("Opacity", ImGuiDataType_Double, &surfaceRender.opacity, 0.01f, nullptr, nullptr, "%.3f");
-    surfaceRender.opacity = std::clamp(surfaceRender.opacity, 0.0, 1.0);
 
-    float tint[3] = {
-        static_cast<float>(surfaceRender.tintColor.x()),
-        static_cast<float>(surfaceRender.tintColor.y()),
-        static_cast<float>(surfaceRender.tintColor.z()),
-    };
-    ImGui::SetNextItemWidth(vectorInputWidth);
-    if (ImGui::ColorEdit3("Tint", tint)) {
-        surfaceRender.tintColor = Vec3(tint[0], tint[1], tint[2]);
+    if (ImGui::CollapsingHeader("Surface")) {
+        if (planeSideLength > 0.0) {
+            double editedSideLength = planeSideLength;
+            ImGui::SetNextItemWidth(vectorInputWidth);
+            if (ImGui::DragScalar("Plane Size", ImGuiDataType_Double, &editedSideLength, 0.05f, nullptr, nullptr, "%.3f")) {
+                actions.setPlaneSideLength = true;
+                actions.planeSideLength = std::max(editedSideLength, 0.1);
+            }
+        }
+        if (ImGui::Button("Reset Plane")) {
+            actions.resetPlaneAndDisableInteraction = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Enable Tilt")) {
+            actions.resetPlaneAndDisableInteraction = false;
+        }
+        if (ImGui::Button("Disable Tilt")) {
+            actions.disable_tilt = true;
+        }
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Friction", ImGuiDataType_Double, &surfaceMaterial.friction, 0.01f, nullptr, nullptr, "%.3f");
+        surfaceMaterial.friction = std::max(surfaceMaterial.friction, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Adhesion", ImGuiDataType_Double, &solverParams.adhesionDistance, 0.005f, nullptr, nullptr, "%.3f");
+        solverParams.adhesionDistance = std::max(solverParams.adhesionDistance, 0.0);
+    }
+
+    if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::SliderInt("Mesh Points", &meshSubdivisions_, 0, 5)) {
+            actions.setMeshSubdivisions = true;
+            actions.meshSubdivisions = meshSubdivisions_;
+        }
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Surface Tension", ImGuiDataType_Double, &defaultMaterial.surfaceTension, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.surfaceTension = std::max(defaultMaterial.surfaceTension, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Damping", ImGuiDataType_Double, &defaultMaterial.viscousDamping, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.viscousDamping = std::max(defaultMaterial.viscousDamping, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Viscosity", ImGuiDataType_Double, &defaultMaterial.laplacianViscosity, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.laplacianViscosity = std::max(defaultMaterial.laplacianViscosity, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Volume Stiffness", ImGuiDataType_Double, &defaultMaterial.volumeStiffness, 1.0f, nullptr, nullptr, "%.1f");
+        defaultMaterial.volumeStiffness = std::max(defaultMaterial.volumeStiffness, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Density", ImGuiDataType_Double, &defaultMaterial.density, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.density = std::max(defaultMaterial.density, 1e-6);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Vertex Damping", ImGuiDataType_Double, &solverParams.vertexDamping, 0.01f, nullptr, nullptr, "%.3f");
+        solverParams.vertexDamping = std::max(solverParams.vertexDamping, 0.2);
+
+         
     }
 
     ImGui::SetNextItemWidth(vectorInputWidth);
