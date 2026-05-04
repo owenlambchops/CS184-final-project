@@ -158,6 +158,11 @@ UiActions UiController::draw(SolverParams& solverParams,
         ImGui::SetNextItemWidth(vectorInputWidth);
         ImGui::DragScalar("Density", ImGuiDataType_Double, &defaultMaterial.density, 0.01f, nullptr, nullptr, "%.3f");
         defaultMaterial.density = std::max(defaultMaterial.density, 1e-6);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Vertex Damping", ImGuiDataType_Double, &solverParams.vertexDamping, 0.01f, nullptr, nullptr, "%.3f");
+        solverParams.vertexDamping = std::max(solverParams.vertexDamping, 0.2);
+
+         
     }
 
     if (ImGui::CollapsingHeader("Advanced")) {
