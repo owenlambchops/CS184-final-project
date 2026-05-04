@@ -4,7 +4,6 @@
 #include "wd/experiments/experiment_logger.h"
 #include "wd/forces/droplet_drag_force_field.h"
 #include "wd/interaction/drag_interactor.h"
-#include "wd/interaction/droplet_drag_interactor.h"
 #include "wd/interaction/input_router.h"
 #include "wd/interaction/plane_tilt_interactor.h"
 #include "wd/render/droplet_gpu_cache.h"
@@ -62,7 +61,6 @@ private:
 
     std::shared_ptr<ConstantForceField> gravityField_;
     std::shared_ptr<DragForceField> dragField_;
-    std::shared_ptr<DropletDragForceField> dropletDragField_;
     std::shared_ptr<const DropletTemplate> dropletTemplate_;
     int nextDropletId_ = 1;
 
@@ -84,6 +82,7 @@ private:
     bool restartKeyWasDown_ = false;
     bool screenshotKeyWasDown_ = false;
     bool singleStepRequested_ = false;
+    bool simulationAdvancedThisFrame_ = false;
     bool screenshotRequested_ = false;
 
     bool cameraRightDragActive_ = false;

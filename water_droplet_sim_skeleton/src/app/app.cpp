@@ -3,8 +3,6 @@
 #include "wd/sim/droplet_factory.h"
 #include "wd/sim/droplet_template.h"
 #include "wd/surface/plane_surface.h"
-#include "wd/forces/droplet_drag_force_field.h"
-#include "wd/interaction/droplet_drag_interactor.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -19,12 +17,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
 #include <iostream>
 #include <sstream>
 
@@ -33,114 +25,46 @@ namespace wd {
 namespace {
 
 constexpr double kMaxCameraDt = 0.1;
-constexpr double kCameraMouseSensitivity = 0.0025;
 constexpr double kCameraMoveSpeed = 2.0;
-constexpr double kCameraScrollDistance = 6.0;
-constexpr double kCameraScrollSmoothingTime = 0.2;
-
+constexpr double kCameraScrollDistance = 0.12;
+constexpr double kCameraScrollSmoothingTime = 0.18;
+constexpr double kCameraMouseSensitivity = 0.0025;
+constexpr const char* kExperimentOutputDir = "experiments";
 
 std::string makeTimestampedRunName() {
-    const std::time_t now = std::time(nullptr);
-    const std::tm* local = std::localtime(&now);
-    std::ostringstream out;
-    out << std::put_time(local, "%Y%m%d_%H%M%S");
-    return out.str();
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime{};
+#if defined(_WIN32)
+    localtime_s(&localTime, &nowTime);
+#else
+    localtime_r(&nowTime, &localTime);
+#endif
+
+    std::ostringstream name;
+    name << "run_" << std::put_time(&localTime, "%Y%m%d_%H%M%S");
+    return name.str();
 }
 
-glm::vec3 toGlm(const Vec3& v) {
-    return glm::vec3(static_cast<float>(v.x()),
-                     static_cast<float>(v.y()),
-                     static_cast<float>(v.z()));
-}
-
-std::string loadTextFile(const std::filesystem::path& path) {
-    std::ifstream file(path);
-    if (!file) {
-        std::cerr << "Failed to open shader file: " << std::filesystem::absolute(path)
-                  << " (cwd: " << std::filesystem::current_path() << ")\n";
-        return {};
+bool ensureExperimentOutputDir() {
+    std::error_code error;
+    std::filesystem::create_directories(kExperimentOutputDir, error);
+    if (error) {
+        std::cerr << "Failed to create experiment output directory: "
+                  << error.message() << "\n";
+        return false;
     }
-
-    std::ostringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
+    return true;
 }
 
-unsigned int compileShader(unsigned int type, const std::filesystem::path& path) {
-    const std::string source = loadTextFile(path);
-    if (source.empty()) return 0;
-
-    const char* sourcePtr = source.c_str();
-    const unsigned int shader = glCreateShader(type);
-    glShaderSource(shader, 1, &sourcePtr, nullptr);
-    glCompileShader(shader);
-
-    int success = GL_FALSE;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (success == GL_TRUE) return shader;
-
-    int logLength = 0;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-    std::string log(std::max(logLength, 1), '\0');
-    glGetShaderInfoLog(shader, logLength, nullptr, log.data());
-    std::cerr << "Shader compile failed: " << path << "\n" << log << "\n";
-    glDeleteShader(shader);
-    return 0;
+std::filesystem::path experimentOutputPath(const std::string& filename) {
+    return std::filesystem::path(kExperimentOutputDir) / filename;
 }
 
-unsigned int createShaderProgram(
-    const std::filesystem::path& vertexPath,
-    const std::filesystem::path& fragmentPath) {
-    const unsigned int vertexShader = compileShader(GL_VERTEX_SHADER, vertexPath);
-    if (vertexShader == 0) return 0;
-
-    const unsigned int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentPath);
-    if (fragmentShader == 0) {
-        glDeleteShader(vertexShader);
-        return 0;
-    }
-
-    const unsigned int program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    int success = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (success == GL_TRUE) return program;
-
-    int logLength = 0;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-    std::string log(std::max(logLength, 1), '\0');
-    glGetProgramInfoLog(program, logLength, nullptr, log.data());
-    std::cerr << "Program link failed: " << vertexPath << " + " << fragmentPath << "\n"
-              << log << "\n";
-    glDeleteProgram(program);
-    return 0;
-}
-
-constexpr std::array<float, 24> kPlaneVertices = {
-    -3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f, -3.0f, 0.0f, 1.0f, 0.0f,
-     3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-    -3.0f, 0.0f,  3.0f, 0.0f, 1.0f, 0.0f,
-};
-
-constexpr std::array<unsigned int, 6> kPlaneIndices = {0, 1, 2, 0, 2, 3};
-
-const glm::vec3 kLightDir = glm::normalize(glm::vec3(0.4f, 0.8f, 0.2f));
-
-void setMat4(unsigned int program, const char* name, const glm::mat4& value) {
-    const int location = glGetUniformLocation(program, name);
-    if (location >= 0) glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
-}
-
-void setVec3(unsigned int program, const char* name, const glm::vec3& value) {
-    const int location = glGetUniformLocation(program, name);
-    if (location >= 0) glUniform3fv(location, 1, glm::value_ptr(value));
+std::string makeScreenshotFilename(const std::string& runName, int index) {
+    std::ostringstream filename;
+    filename << runName << "_screenshot_" << std::setw(4) << std::setfill('0') << index << ".png";
+    return filename.str();
 }
 
 } // namespace
@@ -212,22 +136,15 @@ bool App::initialize() {
     lastFrameTimeSec_ = glfwGetTime();
 
     renderer_ = std::make_unique<RefractiveRenderer>();
-    renderer_->initialize(width_, height_);
-
-    if (!initializeRenderResources()) {
+    if (!renderer_->initialize(width_, height_)) {
+        std::cerr << "Failed to initialize renderer.\n";
         return false;
     }
 
-    // ImGui
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window_, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    if (!initializeImGui()) return false;
 
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
-    dropletDragInteractor_ = std::make_unique<DropletDragInteractor>(dropletDragField_);
     planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
@@ -288,92 +205,33 @@ void App::initializeGlState() {
     glClearColor(0.08f, 0.10f, 0.12f, 1.0f);
 }
 
-bool App::initializeRenderResources() {
-    dropletProgram_ = createShaderProgram(
-        "assets/shaders/droplet.vert", 
-        "assets/shaders/droplet.frag");
-    if (dropletProgram_ == 0) return false;
-
-    planeProgram_ = createShaderProgram(
-        "assets/shaders/scene.vert", 
-        "assets/shaders/scene.frag");
-    if (planeProgram_ == 0) return false;
-
-    initializePlaneMesh();
-    return planeVao_ != 0 && planeEbo_ != 0;
-}
-
-void App::initializePlaneMesh() {
-    planeIndexCount_ = static_cast<int>(kPlaneIndices.size());
-
-    glGenVertexArrays(1, &planeVao_);
-    glGenBuffers(1, &planeVbo_);
-    glGenBuffers(1, &planeEbo_);
-
-    glBindVertexArray(planeVao_);
-
-    glBindBuffer(GL_ARRAY_BUFFER, planeVbo_);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneVertices.size() * sizeof(float)),
-                 kPlaneVertices.data(),
-                 GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeEbo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(kPlaneIndices.size() * sizeof(unsigned int)),
-                 kPlaneIndices.data(),
-                 GL_STATIC_DRAW);
-
-    constexpr int stride = 6 * static_cast<int>(sizeof(float));
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
 void App::buildDefaultScene() {
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
     scene_.surface().material().friction = 0.02;
 
     auto composite = std::make_shared<CompositeForceField>();
-
     gravityField_ = std::make_shared<ConstantForceField>(gravityLikeForce_);
     composite->addField(gravityField_);
-
     dragField_ = std::make_shared<DragForceField>();
     composite->addField(dragField_);
-
-
-    dropletDragField_ = std::make_shared<DropletDragForceField>();
-    composite->addField(dropletDragField_);
-
     scene_.setForceField(composite);
 
-    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(8, 0.22);
+    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(3, 0.20);
     DropletFactory factory(dropletTemplate_);
-
-    SpawnDesc desc;
-    desc.anchorWorld = Vec3(0.0, 0.0, 0.0);
-    desc.initialVelocity = Vec3::Zero();
-    desc.targetVolume = 0.01;
-    desc.material = defaultMaterial_;
-    scene_.droplets().push_back(factory.spawn(1, desc, scene_.surface()));
-
     MergeSplitController mergeSplit(factory);
     sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
 }
 
 void App::spawnDropletAt(const Vec3& anchorWorld) {
     if (!scene_.hasSurface() || !dropletTemplate_) return;
+
     DropletFactory factory(dropletTemplate_);
     SpawnDesc desc;
-    desc.anchorWorld     = anchorWorld;
+    desc.anchorWorld = anchorWorld;
     desc.initialVelocity = Vec3::Zero();
-    desc.targetVolume    = 0.01;
-    desc.material        = defaultMaterial_;
+    desc.targetVolume = 0.0;
+    desc.material = defaultMaterial_;
+
     scene_.droplets().push_back(factory.spawn(nextDropletId_++, desc, scene_.surface()));
 }
 
@@ -382,13 +240,13 @@ void App::restartSimulation() {
     sim_.reset();
     gravityField_.reset();
     dragField_.reset();
-    dropletDragField_.reset();       
     dropletTemplate_.reset();
     nextDropletId_ = 1;
 
     buildDefaultScene();
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
-    dropletDragInteractor_ = std::make_unique<DropletDragInteractor>(dropletDragField_);
+    planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
+    interactionsEnabled_ = true;
     singleStepRequested_ = false;
 }
 
@@ -485,194 +343,147 @@ void App::updateCameraControls(double dt) {
 
 void App::update() {
     simulationAdvancedThisFrame_ = false;
- 
+
     const double now = glfwGetTime();
-    const double dt  = std::clamp(now - lastFrameTimeSec_, 0.0, kMaxCameraDt);
+    const double dt = std::clamp(now - lastFrameTimeSec_, 0.0, kMaxCameraDt);
     lastFrameTimeSec_ = now;
 
     if (input_) input_->beginFrame();
 
-    if (input_ && planeTiltInteractor_ && scene_.hasSurface()) {
-        PlaneTiltParams tiltParams;
-        planeTiltInteractor_->update(input_->state(), width_, height_, dt, scene_, tiltParams);
+    // Always update mouse position for interaction
+    double mouseX = 0.0, mouseY = 0.0;
+    if (window_) {
+        glfwGetCursorPos(window_, &mouseX, &mouseY);
+        input_->setMousePosition(mouseX, mouseY);
     }
-
-    const bool imguiWantsMouse = ImGui::GetIO().WantCaptureMouse;
-
+    const bool imguiWantsMouse = imguiInitialized_ && ImGui::GetIO().WantCaptureMouse;
     if (!imguiWantsMouse) {
         updateCameraControls(dt);
+    } else {
+        cameraRightDragActive_ = false;
     }
- 
-    if (!imguiWantsMouse && input_) {
-        const InputState& state = input_->state();
- 
-        // Try droplet drag first; fall back to surface drag if nothing grabbed
-        if (dropletDragInteractor_) {
-            dropletDragInteractor_->update(state, camera_, width_, height_, scene_);
-        }
- 
-        const bool dropletDragActive = dropletDragField_ && dropletDragField_->active();
-        if (!dropletDragActive && dragInteractor_) {
-            dragInteractor_->update(state, camera_, width_, height_, scene_);
-        }
+
+    if (interactionsEnabled_ && !imguiWantsMouse && dragInteractor_ && input_) {
+        dragInteractor_->update(input_->state(), camera_, width_, height_, scene_);
+    }
+    if (interactionsEnabled_ && !imguiWantsMouse && planeTiltInteractor_ && input_) {
+        planeTiltInteractor_->update(input_->state(), width_, height_, dt, scene_, planeTiltParams_);
     }
 
     if (sim_ && (!paused_ || singleStepRequested_)) {
-        if (dropletDragField_) {
-            for (const auto& d : scene_.droplets()) {
-                dropletDragField_->setActiveDropletId(d->id());
-            }
-        }
         sim_->step(scene_);
         simulationAdvancedThisFrame_ = true;
-        singleStepRequested_         = false;
-        }
-
+        singleStepRequested_ = false;
+    }
+    if (input_) input_->clearFrameDeltas();
 }
 
 void App::render() {
-    using Clock = std::chrono::high_resolution_clock;
-    const auto start = Clock::now();
-
-    glViewport(0, 0, width_, height_);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    const glm::vec3 eye = toGlm(camera_.position());
-    const glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    const float aspect = height_ > 0 ? static_cast<float>(width_) / static_cast<float>(height_) : 1.0f;
-    const glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-    const glm::mat4 model(1.0f);
-
-    if (planeProgram_ != 0 && planeVao_ != 0) {
-        glUseProgram(planeProgram_);
-        setMat4(planeProgram_, "uModel", model);
-        setMat4(planeProgram_, "uView", view);
-        setMat4(planeProgram_, "uProj", proj);
-
-        glBindVertexArray(planeVao_);
-        glDrawElements(GL_TRIANGLES, planeIndexCount_, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
-    }
-
-    if (dropletProgram_ != 0) {
-        dropletCache_.sync(scene_.droplets());
-
-        glUseProgram(dropletProgram_);
-        setMat4(dropletProgram_, "uModel", model);
-        setMat4(dropletProgram_, "uView", view);
-        setMat4(dropletProgram_, "uProj", proj);
-        setVec3(dropletProgram_, "uLightDir", kLightDir);
-        setVec3(dropletProgram_, "uViewPos", eye);
-
-        for (const auto& droplet : scene_.droplets()) {
-            dropletCache_.drawDroplet(droplet->id());
-        }
-    }
-
-    glUseProgram(0);
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    UiActions actions = ui_->draw(
-        solverParams_,
-        renderParams_,
-        defaultMaterial_,
-        scene_.surface().material(),
-        scene_.surface().renderParams(),
-        dynamic_cast<PlaneSurface*>(&scene_.surface()) ? dynamic_cast<PlaneSurface*>(&scene_.surface())->sideLength() : 0.0,
-        true,
-        15.0,
-        10.0,
-        1.0,
-        1.0,
-        gravityLikeForce_,
-        sim_->mergeSplitController());
-
-    if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
-
-    if (actions.applyGravity) {
-        gravityLikeForce_ = actions.gravityForce;
-        if (gravityField_) gravityField_->setForce(gravityLikeForce_);
-    }
-
-    if (actions.saveScreenshot) screenshotRequested_ = true;
-
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    const auto end = Clock::now();
-    RenderStats stats;
+    RenderStats stats{};
     stats.frameWidth = width_;
     stats.frameHeight = height_;
-    stats.renderMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-    if (logger_ && sim_) logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
-}
+    bool drawUi = false;
+    if (imguiInitialized_ && ui_ && sim_ && scene_.hasSurface()) {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-void App::rebuildPlaneGpuMesh() {
-    auto* plane = dynamic_cast<PlaneSurface*>(&scene_.surface());
-    if (!plane) return;
+        auto* planeSurface = dynamic_cast<PlaneSurface*>(&scene_.surface());
+        const double planeSideLength = planeSurface ? planeSurface->sideLength() : 0.0;
+        UiActions actions = ui_->draw(
+            solverParams_,
+            renderParams_,
+            defaultMaterial_,
+            scene_.surface().material(),
+            scene_.surface().renderParams(),
+            planeSideLength,
+            planeTiltParams_.enabled,
+            planeTiltParams_.maxTiltDeg,
+            planeTiltParams_.responsiveness,
+            planeTiltParams_.axisScaleX,
+            planeTiltParams_.axisScaleZ,
+            gravityLikeForce_,
+            sim_->mergeSplitController());
+        sim_->singleDropletSolver().params() = solverParams_;
+        if (actions.setPlaneSideLength && planeSurface) {
+            planeSurface->setSideLength(actions.planeSideLength);
+        }
+        // Plane tilt always enabled
+        planeTiltParams_.enabled = true;
+        if (actions.setPlaneTiltMaxDeg) planeTiltParams_.maxTiltDeg = actions.planeTiltMaxDeg;
+        if (actions.setPlaneTiltResponsiveness) planeTiltParams_.responsiveness = actions.planeTiltResponsiveness;
+        if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
+        if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
+        if (actions.resetPlaneAndDisableInteraction) {
+            if (planeSurface) planeSurface->setNormal(Vec3::UnitY());
+            // Plane tilt and interaction always enabled
+            interactionsEnabled_ = true;
+            if (dragField_) dragField_->setActive(true);
+        }
+        if (actions.disable_tilt) {
+            planeTiltParams_.enabled = false;
+        }
+        if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
+        if (actions.applyGravity) {
+            gravityLikeForce_ = actions.gravityForce;
+            if (gravityField_) gravityField_->setForce(gravityLikeForce_);
+        }
+        if (actions.saveScreenshot) screenshotRequested_ = true;
 
-    const Vec3 n  = plane->normal();
-    const Vec3 o  = plane->origin();
-    const Vec3 tu = plane->tangentU();
-    const Vec3 tv = plane->tangentV();
-    constexpr float ext = 3.0f;
-
-    auto v = [](const Vec3& p) -> std::array<float,3> {
-        return { static_cast<float>(p.x()),
-                 static_cast<float>(p.y()),
-                 static_cast<float>(p.z()) };
-    };
-
-    Vec3 corners[4] = {
-        o - ext*tu - ext*tv,
-        o + ext*tu - ext*tv,
-        o + ext*tu + ext*tv,
-        o - ext*tu + ext*tv,
-    };
-
-    std::array<float, 24> verts;
-    for (int i = 0; i < 4; ++i) {
-        verts[i*6+0] = static_cast<float>(corners[i].x());
-        verts[i*6+1] = static_cast<float>(corners[i].y());
-        verts[i*6+2] = static_cast<float>(corners[i].z());
-        verts[i*6+3] = static_cast<float>(n.x());
-        verts[i*6+4] = static_cast<float>(n.y());
-        verts[i*6+5] = static_cast<float>(n.z());
+        ImGui::Render();
+        drawUi = true;
     }
 
-    glBindVertexArray(planeVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, planeVbo_);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-                 verts.data(), GL_DYNAMIC_DRAW);
-    glBindVertexArray(0);
-    // EBO indices {0,1,2,0,2,3} stay the same — no re-upload needed
+    if (renderer_) {
+        stats = renderer_->render(scene_, camera_, renderParams_);
+    }
+
+    if (drawUi) {
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+
+    if (screenshotRequested_) saveScreenshot();
+
+    if (logger_ && sim_ && simulationAdvancedThisFrame_) {
+        logger_->record(sim_->timeSec(), scene_, sim_->stats(), stats);
+    }
 }
 
-void App::destroyRenderResources() {
-    dropletCache_.clear();
+void App::saveExperimentCsv() const {
+    if (!logger_ || runName_.empty() || !ensureExperimentOutputDir()) return;
 
-    if (planeEbo_ != 0) glDeleteBuffers(1, &planeEbo_);
-    if (planeVbo_ != 0) glDeleteBuffers(1, &planeVbo_);
-    if (planeVao_ != 0) glDeleteVertexArrays(1, &planeVao_);
-    if (planeProgram_ != 0) glDeleteProgram(planeProgram_);
-    if (dropletProgram_ != 0) glDeleteProgram(dropletProgram_);
+    const auto path = experimentOutputPath(runName_ + ".csv");
+    if (!logger_->saveCsv(path.string())) {
+        std::cerr << "Failed to save experiment CSV: " << path << "\n";
+    }
+}
 
-    dropletProgram_ = 0;
-    planeProgram_ = 0;
-    planeVao_ = 0;
-    planeVbo_ = 0;
-    planeEbo_ = 0;
-    planeIndexCount_ = 0;
+void App::saveScreenshot() {
+    screenshotRequested_ = false;
+    if (runName_.empty() || !ensureExperimentOutputDir()) return;
+
+    const auto path = experimentOutputPath(makeScreenshotFilename(runName_, screenshotCounter_));
+    if (!saveFramebufferPng(path.string(), width_, height_)) {
+        std::cerr << "Failed to save screenshot: " << path << "\n";
+        return;
+    }
+
+    std::cout << "Saved screenshot: " << path << "\n";
+    ++screenshotCounter_;
+}
+
+void App::shutdownImGui() {
+    if (!imguiInitialized_) return;
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    imguiInitialized_ = false;
 }
 
 void App::shutdown() {
-    destroyRenderResources();
-    shutdownImGui();
+    saveExperimentCsv();
 
     logger_.reset();
     ui_.reset();

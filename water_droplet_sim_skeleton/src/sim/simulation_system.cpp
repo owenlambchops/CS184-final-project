@@ -1,6 +1,5 @@
 #include "wd/sim/simulation_system.h"
 #include <algorithm>
-#include "wd/forces/droplet_drag_force_field.h"
 #include <chrono>
 #include <cmath>
 
@@ -16,9 +15,6 @@ void SimulationSystem::step(Scene& scene) {
     if (!scene.hasSurface() || !scene.hasForceField()) return;
 
     for (auto& d : scene.droplets()) {
-        if (auto* ddf = scene.compositeForceField().findField<DropletDragForceField>()) {
-            ddf->setActiveDropletId(d->id());
-        }
         solver_.step(*d, scene.surface(), scene.forceField(), timeSec_);
     }
 

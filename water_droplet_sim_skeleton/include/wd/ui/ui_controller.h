@@ -24,6 +24,7 @@ struct UiActions {
     bool resetPlaneAndDisableInteraction = false;
     bool setMeshSubdivisions = false;
     int meshSubdivisions = 2;
+    bool disable_tilt = true;
 };
 
 class UiController {
@@ -46,6 +47,7 @@ private:
     Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
     Vec3 gravityDraft_ = Vec3(0.0, -9.81, 0.0);
     bool gravityDraftInitialized_ = true;
+    int meshSubdivisions_ = 2;
 };
 
 } // namespace wd

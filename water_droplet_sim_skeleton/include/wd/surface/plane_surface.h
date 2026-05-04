@@ -7,9 +7,6 @@ class PlaneSurface final : public ISurface {
 public:
     PlaneSurface(const Vec3& origin, const Vec3& normal, double sideLength = 6.0);
 
-    void setNormal(const Vec3& normal);
-    void setOrigin(const Vec3& origin) { origin_ = origin; }
-
     SurfaceSample closestSample(const Vec3& worldPoint) const override;
     Vec3 projectPoint(const Vec3& worldPoint) const override;
     Vec3 normalAt(const Vec3& worldPoint) const override;
@@ -33,11 +30,6 @@ private:
     bool containsProjection(const Vec3& projectedPoint) const;
 
     static constexpr double kMinSideLength = 0.1;
-
-    static Vec3 safeNormalize(const Vec3& v, const Vec3& fallback) {
-        double n = v.norm();
-        return n > 1e-12 ? v / n : fallback;
-    }
 
     Vec3 origin_;
     Vec3 normal_;
