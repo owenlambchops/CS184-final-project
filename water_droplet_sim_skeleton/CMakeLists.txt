@@ -78,8 +78,11 @@ target_compile_options(wd_core PRIVATE
 
 add_executable(wd_skeleton src/main.cpp)
 target_include_directories(wd_skeleton PRIVATE ${CMAKE_SOURCE_DIR}/include)
-
 target_link_libraries(wd_skeleton PRIVATE wd_core)
+
+add_executable(wd_debug src/debug_sim.cpp)
+target_include_directories(wd_debug PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(wd_debug PRIVATE wd_core)
 
 add_custom_target(copy_runtime_assets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -88,3 +91,4 @@ add_custom_target(copy_runtime_assets ALL
     COMMENT "Copying runtime assets"
 )
 add_dependencies(wd_skeleton copy_runtime_assets)
+add_dependencies(wd_debug   copy_runtime_assets)

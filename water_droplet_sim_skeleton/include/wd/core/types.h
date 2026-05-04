@@ -74,6 +74,13 @@ struct SurfaceMaterialParams {
     double advContactAngleDeg = 90.0;
     double recContactAngleDeg = 30.0;
     double contactStiffness = 0.5;
+
+    // Viscous drag applied to the tangential velocity of vertices in the
+    // adhesion zone [0, adhesionDist].  Units: 1/s (exponential decay rate).
+    // Damping tapers linearly to zero at adhesionDist so it does not affect
+    // vertices that have fully lifted off the surface.
+    // Default 0 = disabled (no change to existing behaviour).
+    double contactLineDamping = 0.0;
 };
 
 struct SurfaceRenderParams {

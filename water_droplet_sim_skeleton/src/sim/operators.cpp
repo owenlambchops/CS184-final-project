@@ -131,6 +131,21 @@ void CollisionProjector::apply(
             // 4) Immediate position correction by velocity change.
             X.row(i) += ((vNew - vOld) * dt).transpose();
             U.row(i) = vNew.transpose();
+        } else if (s.signedDistance < adhesionDist) {
+            // Adhesion-zone viscous drag: damp the tangential velocity of
+            // near-surface vertices.  This stops the curvature-flow/collision
+            // cycle from sustaining oscillation at the contact line without
+            // constraining contact-angle or normal dynamics.
+            // Damping tapers linearly: full at distance=0, zero at adhesionDist.
+            const double cld = surface.material().contactLineDamping;
+            if (cld > 0.0) {
+                const Vec3 n = s.normal.normalized();
+                const Vec3 v = U.row(i).transpose();
+                const Vec3 vTang = v - v.dot(n) * n;
+                const double blend = 1.0 - s.signedDistance / std::max(adhesionDist, 1e-12);
+                const double dampFactor = std::max(0.0, 1.0 - cld * dt * blend);
+                U.row(i) = (v.dot(n) * n + vTang * dampFactor).transpose();
+            }
         }
     }
 }
