@@ -97,7 +97,9 @@ struct SolverParams {
     bool enableContactAngle = false;
     bool enableVolumeCorrect = true;
     bool enableVertexRepulsion = false;
-    bool enableContactBandEdgeProjection = true;
+    // Not part of the Zhang/python baseline force model; keep off by default
+    // to avoid injecting extra shape constraints that can destabilize zero-g cases.
+    bool enableContactBandEdgeProjection = false;
     int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;

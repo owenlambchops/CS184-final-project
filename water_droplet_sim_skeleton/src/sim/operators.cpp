@@ -87,6 +87,9 @@ void ExternalForceOperator::apply(
 }
 
 // Enforces surface contact by projection and velocity correction.
+// Zhang et al. collision model formulas used here:
+// - Eq. (1): v' = v - (v · n) n
+// - Eq. (2): tangential friction magnitude reduction
 // - Projects near-surface/penetrating vertices to the surface offset by pushout epsilon.
 // - Removes normal velocity component (non-penetration constraint).
 // - Applies tangential speed reduction via simple friction thresholding.
@@ -187,12 +190,14 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 // This bidirectional behavior reduces curvature variation and shrinks high-curvature
 // features, which is exactly the capillary smoothing effect of surface tension.
 //
-// Integration in this code:
-// f_st = gamma * deltaX, a_st = f_st / density, then v += a_st * dt.
+// Zhang et al. force decomposition term used here:
+// f_st,i = gamma * Delta x_i
+// a_st,i = f_st,i / rho
+// v_i <- v_i + a_st,i * dt
+// (same discrete form as the working python_sim_dev/water_sim_basic.cpp path)
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
-    const auto& N = drop.derived().vertexNormals;
     if (X.rows() == 0 || dt <= 0.0) return;
 
     const auto neighbours = buildNeighbours(drop.faces(), X.rows());
@@ -201,43 +206,12 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
 
     const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
     U += scale * lapX;
-
-    // Small tangential redistribution to one-ring neighbors:
-    // closer neighbors get stronger effect via inverse edge-length weighting.
-    constexpr double kTangentialNeighborGain = 0.12;
-    for (int i = 0; i < X.rows(); ++i) {
-        Vec3 ni = N.row(i).transpose();
-        const double nn = ni.norm();
-        if (nn <= 1e-12) continue;
-        ni /= nn;
-
-        const Vec3 li = lapX.row(i).transpose();
-        const double lapMag = li.norm();
-        if (!std::isfinite(lapMag) || lapMag <= 1e-12) continue;
-        const double curvatureSign = li.dot(ni) >= 0.0 ? 1.0 : -1.0;
-
-        for (int j : neighbours[static_cast<size_t>(i)]) {
-            if (j < 0 || j >= U.rows() || j == i) continue;
-
-            Vec3 edge = X.row(j).transpose() - X.row(i).transpose();
-            const double edgeLen = edge.norm();
-            if (edgeLen <= 1e-8) continue;
-
-            Vec3 tangentDir = edge - edge.dot(ni) * ni;
-            const double tn = tangentDir.norm();
-            if (tn <= 1e-12) continue;
-            tangentDir /= tn;
-
-            const double weight = 1.0 / edgeLen; // stronger when closer
-            const Vec3 dv =
-                0.5 * (curvatureSign * kTangentialNeighborGain * std::abs(scale) * lapMag * weight) * tangentDir;
-            U.row(j) += dv.transpose();
-        }
-    }
 }
 
 // Contact-angle hysteresis operator near the contact line.
 // Applies restoring force only when contact angle exits [receding, advancing] band.
+// Zhang et al. boundary-force form used here:
+// f_b,i = alpha * (theta_i - theta_r/a) * n_p
 void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
     auto& U = drop.velocities();
     const auto& X = drop.positions();
@@ -407,6 +381,9 @@ double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&
 // Two-stage volume stabilization:
 // 1) Local velocity correction (reduce volume-changing deformation modes).
 // 2) Global positional correction to hit target volume exactly.
+// Zhang et al. formulas used here:
+// - Eq. (10)-(11): area-weighted local normal-velocity averaging/correction
+// - Global correction: d = Delta V / A, x_i <- x_i + d n_i
 void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) const {
     (void)surface;
     (void)dt;
