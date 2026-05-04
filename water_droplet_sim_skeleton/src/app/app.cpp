@@ -189,7 +189,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(2, 0.20);
+    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(3, 0.20);
     DropletFactory factory(dropletTemplate_);
     MergeSplitController mergeSplit(factory);
     sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));
@@ -385,6 +385,13 @@ void App::render() {
             planeTiltParams_.enabled = false;
             interactionsEnabled_ = false;
             if (dragField_) dragField_->setActive(false);
+        } else if (actions.resetPlaneAndDisableInteraction == false) {
+            interactionsEnabled_ = true;
+            planeTiltParams_.enabled = true;
+            if (dragField_) dragField_->setActive(true);
+        }
+        if (actions.disable_tilt) {
+            planeTiltParams_.enabled = false;
         }
         if (actions.createDroplet) spawnDropletAt(actions.spawnAnchor);
         if (actions.applyGravity) {

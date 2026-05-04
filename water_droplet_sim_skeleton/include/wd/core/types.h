@@ -57,9 +57,11 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 1000.0;           // gamma
-    double viscousDamping = 8.0;          // mu
-    double laplacianViscosity = 3.0;      // eta
+    // Tuned defaults: allow capillary lift without overdamping lower vertices.
+    double surfaceTension = 2000.0;        // gamma
+    double viscousDamping = 5.0;           // mu
+    double laplacianViscosity = 8.0;       // eta
+    double volumeStiffness = 2000.0;       // k_v
     double density = 1.0;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = true;
@@ -94,20 +96,18 @@ struct SolverParams {
     bool enableCollision = true;
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
-    bool enableContactAngle = true;
+    bool enableContactAngle = false;
     bool enableVolumeCorrect = true;
-    bool enableVertexRepulsion = true;
-    int remeshMaxOpsPerSubstep = 32;
+    bool enableVertexRepulsion = false;
     
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.005;
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
-    double vertexDamping = 0.0;
-    double vertexRepulsionStrength = 100.0;        // acceleration scale
-    double vertexRepulsionTargetRatio = 0.8;      // trigger below ratio * mean edge length
-    double vertexRepulsionMaxAccel = 120.0;       // per-vertex cap
-
+    double vertexDamping = 0.2;
+    int contactBandProjIterations = 3;
+    double contactBandProjRelaxation = 0.2;
+    double contactBandProjTargetRatio = 0.9;
 };
 
 enum class RenderDebugView : int {

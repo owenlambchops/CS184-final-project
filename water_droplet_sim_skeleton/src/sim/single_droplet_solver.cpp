@@ -32,9 +32,17 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             U = U.array().min(speedClamp).max(-speedClamp);
         }
 
+        // Additional per-vertex velocity damping:
+        // v <- v * max(0, 1 - c * dt), where c = params_.vertexDamping.
+        // This is a simple stable linear drag term applied uniformly.
+        const double vertexDamping = std::max(params_.vertexDamping, 0.0);
+        if (vertexDamping > 0.0) {
+            const double factor = std::max(0.0, 1.0 - vertexDamping * dt);
+            U *= factor;
+        }
+
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
         if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
-
 
         // Volume correction must run on the live droplet state.
         // This preserves local-first/global-second logic in VolumeCorrector::apply:
@@ -66,14 +74,6 @@ MatX3d SingleDropletSolver::computeAcceleration(
 
     if (params_.enableCurvatureFlow) curvature_.apply(internalDrop, surface, 1.0);
     if (params_.enableContactAngle) contact_.apply(internalDrop, surface, 1.0, params_.adhesionDistance);
-    if (params_.enableVertexRepulsion) {
-        repulsion_.apply(
-                internalDrop,
-                1.0,
-                params_.vertexRepulsionTargetRatio,
-                params_.vertexRepulsionStrength,
-                params_.vertexRepulsionMaxAccel);
-    }
 
     MatX3d aInternal = internalDrop.velocities();
     const double maxA = std::max(params_.maxInternalAccel, 0.0);

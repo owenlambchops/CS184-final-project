@@ -23,6 +23,9 @@ struct UiActions {
     bool setPlaneTiltAxisScaleZ = false;
     double planeTiltAxisScaleZ = 1.0;
     bool resetPlaneAndDisableInteraction = false;
+    bool setMeshSubdivisions = false;
+    int meshSubdivisions = 2;
+    bool disable_tilt = true;
 };
 
 class UiController {
@@ -43,8 +46,9 @@ public:
 
 private:
     Vec3 spawnAnchor_ = Vec3(0.0, 0.6, 0.0);
-    Vec3 gravityDraft_ = Vec3(0.0, -9.81, 0.0);
+    Vec3 gravityDraft_ = Vec3(0.0, -3.5, 0.0);
     bool gravityDraftInitialized_ = true;
+    int meshSubdivisions_ = 2;
 };
 
 } // namespace wd

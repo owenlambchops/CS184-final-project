@@ -2,8 +2,6 @@
 #include "wd/sim/cgl_math.h"
 #include <algorithm>
 #include <cmath>
-#include <map>
-#include <set>
 
 namespace wd {
 namespace {
@@ -11,26 +9,6 @@ namespace {
 // Small numeric tolerance used for robust normalization/angle logic.
 constexpr double kEps = 1e-10;
 constexpr double kPi = 3.14159265358979323846;
-
-// Builds one-ring adjacency from triangle connectivity.
-// Each vertex stores unique neighboring vertex indices.
-std::vector<std::vector<int>> buildNeighbours(const MatX3i& faces, int n) {
-    std::vector<std::set<int>> adjSets(n);
-    for (int i = 0; i < faces.rows(); ++i) {
-        const int a = faces(i, 0);
-        const int b = faces(i, 1);
-        const int c = faces(i, 2);
-        adjSets[a].insert(b); adjSets[a].insert(c);
-        adjSets[b].insert(a); adjSets[b].insert(c);
-        adjSets[c].insert(a); adjSets[c].insert(b);
-    }
-
-    std::vector<std::vector<int>> neighbours(n);
-    for (int i = 0; i < n; ++i) {
-        neighbours[i] = std::vector<int>(adjSets[i].begin(), adjSets[i].end());
-    }
-    return neighbours;
-}
 
 Weights computeCotangentWeights(const MatX3d& x, const MatX3i& faces) {
     return computeCotangentWeightsCgl(toVec3List(x), toFaceList(faces));
@@ -90,31 +68,6 @@ std::vector<double> computeLumpedAreas(const Droplet& drop) {
     return areas;
 }
 
-double computeMeanEdgeLength(const Droplet& drop) {
-    const auto& X = drop.positions();
-    const auto& F = drop.faces();
-    double sumLen = 0.0;
-    int edgeCount = 0;
-
-    for (int fi = 0; fi < F.rows(); ++fi) {
-        const int i0 = F(fi, 0);
-        const int i1 = F(fi, 1);
-        const int i2 = F(fi, 2);
-
-        const Vec3 p0 = X.row(i0).transpose();
-        const Vec3 p1 = X.row(i1).transpose();
-        const Vec3 p2 = X.row(i2).transpose();
-
-        sumLen += (p1 - p0).norm();
-        sumLen += (p2 - p1).norm();
-        sumLen += (p0 - p2).norm();
-        edgeCount += 3;
-    }
-
-    if (edgeCount == 0) return 0.0;
-    return sumLen / static_cast<double>(edgeCount);
-}
-
 } // namespace
 
 // Applies external acceleration field samples directly to velocity (semi-implicit update step).
@@ -134,6 +87,9 @@ void ExternalForceOperator::apply(
 }
 
 // Enforces surface contact by projection and velocity correction.
+// Zhang et al. collision model formulas used here:
+// - Eq. (1): v' = v - (v · n) n
+// - Eq. (2): tangential friction magnitude reduction
 // - Projects near-surface/penetrating vertices to the surface offset by pushout epsilon.
 // - Removes normal velocity component (non-penetration constraint).
 // - Applies tangential speed reduction via simple friction thresholding.
@@ -150,7 +106,10 @@ void CollisionProjector::apply(
 
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance < adhesionDist) {
+        // Match python_sim_dev/water_sim_basic.cpp behavior:
+        // only hard-project when penetrating the surface (distance < 0).
+        // Vertices in the adhesion band [0, adhesionDist] should not be forcibly snapped.
+        if (s.signedDistance < 0.0) {
             // 1) Project penetrated vertex to the closest point on the solid.
             X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
@@ -234,23 +193,44 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 // This bidirectional behavior reduces curvature variation and shrinks high-curvature
 // features, which is exactly the capillary smoothing effect of surface tension.
 //
-// Integration in this code:
-// f_st = gamma * deltaX, a_st = f_st / density, then v += a_st * dt.
+// Zhang et al. force decomposition term used here:
+// f_st,i = gamma * Delta x_i
+// a_st,i = f_st,i / rho
+// v_i <- v_i + a_st,i * dt
+// (same discrete form as the working python_sim_dev/water_sim_basic.cpp path)
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    const auto& N = drop.derived().vertexNormals;
     if (X.rows() == 0 || dt <= 0.0) return;
 
     const auto neighbours = buildNeighbours(drop.faces(), X.rows());
     const Weights w = computeCotangentWeights(X, drop.faces());
     const MatX3d lapX = computeLaplacian(X, neighbours, w);
 
+    // Zhang et al. volume-preservation pressure term:
+    // f_vol,i = k_v (V0 - V) n_i,  a_vol,i = f_vol,i / rho.
+    // We apply it in the same acceleration accumulation path as curvature force.
+    const double V0 = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
+    const double V = drop.derived().currentVolume;
+    const double volumeStiffness = std::max(0.0, drop.material().volumeStiffness); // k_v
+    const double vp = volumeStiffness * (V0 - V) / std::max(drop.material().density, 1e-8);
+
     const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
     U += scale * lapX;
+    for (int i = 0; i < U.rows(); ++i) {
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+        U.row(i) += (vp * dt * ni).transpose();
+    }
 }
 
 // Contact-angle hysteresis operator near the contact line.
 // Applies restoring force only when contact angle exits [receding, advancing] band.
+// Zhang et al. boundary-force form used here:
+// f_b,i = alpha * (theta_i - theta_r/a) * n_p
 void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
     auto& U = drop.velocities();
     const auto& X = drop.positions();
@@ -291,132 +271,6 @@ void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double d
     }
 }
 
-// Mesh-quality regularization in edge space.
-// Short edges repel, long edges attract, then result is projected to tangent plane.
-void VertexRepulsionOperator::apply(
-        Droplet& drop,
-        double dt,
-        double targetRatio,
-        double strength,
-        double maxAccel) const {
-    if (dt <= 0.0) return;
-    if (strength <= 0.0) return;
-
-    const auto& E = drop.edges();
-    const auto& X = drop.positions();
-    const auto& N = drop.derived().vertexNormals;
-    auto& U = drop.velocities();
-    const int n = X.rows();
-    if (n == 0 || E.empty()) return;
-
-    const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
-    const double targetLen = std::max(1e-8, targetRatio * meanEdge);
-    const double density = std::max(drop.material().density, 1e-8);
-    const double accelCap = std::max(0.0, maxAccel);
-
-    MatX3d aRep = MatX3d::Zero(n, 3);
-    for (const auto& e : E) {
-        const int i = e.x();
-        const int j = e.y();
-        if (i < 0 || j < 0 || i >= n || j >= n) continue;
-
-        const Vec3 xi = X.row(i).transpose();
-        const Vec3 xj = X.row(j).transpose();
-        const Vec3 d = xj - xi;
-        const double len = d.norm();
-        if (len <= 1e-12) continue;
-
-        const Vec3 dir = d / len;
-        const double rel = (len - targetLen) / targetLen;
-        const double mag = strength * rel * std::abs(rel);
-        if (std::abs(mag) <= 1e-12) continue;
-
-        // Short edge (rel < 0): pushes vertices apart.
-        // Long edge  (rel > 0): pulls vertices together.
-        aRep.row(i) += ( mag * dir / density).transpose();
-        aRep.row(j) += (-mag * dir / density).transpose();
-    }
-
-    for (int i = 0; i < n; ++i) {
-        Vec3 ai = aRep.row(i).transpose();
-        Vec3 ni = N.row(i).transpose();
-        const double nn = ni.norm();
-        if (nn > 1e-12) {
-            ni /= nn;
-            ai -= ai.dot(ni) * ni; // tangent projection to reduce shape-volume side effects
-        }
-        const double an = ai.norm();
-        if (accelCap > 0.0 && an > accelCap) ai *= accelCap / std::max(an, 1e-8);
-        U.row(i) += (ai * dt).transpose();
-    }
-}
-
-void ContactBandEdgeProjector::apply(
-        Droplet& drop,
-        const ISurface& surface,
-        double adhesionDist,
-        double targetRatio,
-        int iterations,
-        double relaxation) const {
-    auto& X = drop.positions();
-    auto& U = drop.velocities();
-    const auto& E = drop.edges();
-    const int n = X.rows();
-    if (n == 0 || E.empty()) return;
-
-    const double safeAdhesion = std::max(0.0, adhesionDist);
-    const int iters = std::max(0, iterations);
-    const double omega = std::clamp(relaxation, 0.0, 1.0);
-    if (iters == 0 || omega <= 0.0) return;
-
-    const double meanEdge = std::max(drop.derived().meanEdgeLength, 1e-8);
-    const double targetLen = std::max(1e-8, targetRatio * meanEdge);
-
-    MatX3d XPrev = X;
-    for (int it = 0; it < iters; ++it) {
-        drop.updateDerived();
-
-        std::vector<bool> inBand(static_cast<size_t>(n), false);
-        std::vector<Vec3> bandNormal(static_cast<size_t>(n), Vec3::UnitY());
-        for (int i = 0; i < n; ++i) {
-            SurfaceSample s = surface.closestSample(X.row(i).transpose());
-            if (s.signedDistance >= 0.0 && s.signedDistance <= safeAdhesion) {
-                inBand[static_cast<size_t>(i)] = true;
-                bandNormal[static_cast<size_t>(i)] = s.normal.normalized();
-            }
-        }
-
-        for (const auto& e : E) {
-            const int i = e.x();
-            const int j = e.y();
-            if (i < 0 || j < 0 || i >= n || j >= n) continue;
-            if (!inBand[static_cast<size_t>(i)] || !inBand[static_cast<size_t>(j)]) continue;
-
-            const Vec3 xi = X.row(i).transpose();
-            const Vec3 xj = X.row(j).transpose();
-            const Vec3 d = xj - xi;
-            const double len = d.norm();
-            if (len <= 1e-12) continue;
-
-            // PBD-style symmetric correction: reduce edge-length error without high-force injection.
-            const double C = len - targetLen;
-            const Vec3 dir = d / len;
-            Vec3 corr = 0.5 * omega * C * dir;
-
-            Vec3 ni = bandNormal[static_cast<size_t>(i)];
-            Vec3 nj = bandNormal[static_cast<size_t>(j)];
-            corr -= corr.dot(ni) * ni; // tangent at i
-            Vec3 corrJ = corr - corr.dot(nj) * nj; // tangent at j
-
-            X.row(i) += corr.transpose();
-            X.row(j) -= corrJ.transpose();
-        }
-    }
-
-    // Convert projected position change to velocity so next step stays consistent.
-    U += (X - XPrev);
-}
-
 // Public wrapper for closed-volume estimate.
 double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&) const {
     return computeClosedVolumeLocal(drop);
@@ -425,6 +279,9 @@ double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&
 // Two-stage volume stabilization:
 // 1) Local velocity correction (reduce volume-changing deformation modes).
 // 2) Global positional correction to hit target volume exactly.
+// Zhang et al. formulas used here:
+// - Eq. (10)-(11): area-weighted local normal-velocity averaging/correction
+// - Global correction: d = Delta V / A, x_i <- x_i + d n_i
 void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) const {
     (void)surface;
     (void)dt;
@@ -517,7 +374,10 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) c
 
     // Global volume correction: d = ΔV / A, then x_i += d n_i.
     if (doGlobal) {
-        const double d = dV / sumArea;
+        double d = dV / sumArea;
+        const double edgeScale = std::max(drop.derived().meanEdgeLength, 1e-8);
+        const double maxStep = 0.25 * edgeScale;
+        d = std::clamp(d, -maxStep, maxStep);
         for (int i = 0; i < n; ++i) {
             Vec3 ni = N.row(i).transpose();
             const double nn = ni.norm();

@@ -17,13 +17,16 @@ constexpr const char* kDebugViewLabels[] = {
     "Thickness",
     "Wireframe",
     "Caustics",
+    "Wireframe",
+    "Caustics",
 };
 
 } // namespace
 
 UiActions UiController::draw(SolverParams& solverParams,
+UiActions UiController::draw(SolverParams& solverParams,
                              RenderParams& renderParams,
-                             MaterialParams&,
+                             MaterialParams& defaultMaterial,
                              SurfaceMaterialParams& surfaceMaterial,
                              SurfaceRenderParams& surfaceRender,
                              double planeSideLength,
@@ -41,23 +44,24 @@ UiActions UiController::draw(SolverParams& solverParams,
         gravityDraftInitialized_ = true;
     }
 
-    ImGui::Begin("Droplet Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
     const float vectorInputWidth = ImGui::CalcTextSize("-000.000  -000.000  -000.000").x;
     ImGui::SetNextItemWidth(vectorInputWidth);
     ImGui::DragScalarN("Spawn XYZ", ImGuiDataType_Double, spawnAnchor_.data(), 3, 0.01f, nullptr, nullptr, "%.3f");
-    if (ImGui::Button("Create Droplet")) {
+    if (ImGui::Button("Spawn")) {
         actions.createDroplet = true;
         actions.spawnAnchor = spawnAnchor_;
     }
-    if (ImGui::Button("Save Screenshot")) {
+    ImGui::SameLine();
+    if (ImGui::Button("Screenshot")) {
         actions.saveScreenshot = true;
     }
 
     ImGui::Separator();
     ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalarN("Gravity XYZ", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f");
-    if (ImGui::Button("Apply Gravity")) {
+    ImGui::DragScalarN("Gravity", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f");
+    if (ImGui::Button("Apply")) {
         actions.applyGravity = true;
         actions.gravityForce = gravityDraft_;
     }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace wd {
 
@@ -21,6 +22,75 @@ std::vector<Face> toFaceList(const MatX3i& F) {
         out.emplace_back(F(i, 0), F(i, 1), F(i, 2));
     }
     return out;
+}
+
+std::vector<std::vector<int>> buildNeighbours(const MatX3i& F, int nVertices) {
+    std::vector<std::set<int>> adjSets(static_cast<size_t>(std::max(0, nVertices)));
+    for (int i = 0; i < F.rows(); ++i) {
+        const int a = F(i, 0);
+        const int b = F(i, 1);
+        const int c = F(i, 2);
+        if (a >= 0 && a < nVertices && b >= 0 && b < nVertices) {
+            adjSets[static_cast<size_t>(a)].insert(b);
+            adjSets[static_cast<size_t>(b)].insert(a);
+        }
+        if (b >= 0 && b < nVertices && c >= 0 && c < nVertices) {
+            adjSets[static_cast<size_t>(b)].insert(c);
+            adjSets[static_cast<size_t>(c)].insert(b);
+        }
+        if (c >= 0 && c < nVertices && a >= 0 && a < nVertices) {
+            adjSets[static_cast<size_t>(c)].insert(a);
+            adjSets[static_cast<size_t>(a)].insert(c);
+        }
+    }
+
+    std::vector<std::vector<int>> neighbours(static_cast<size_t>(std::max(0, nVertices)));
+    for (int i = 0; i < nVertices; ++i) {
+        const auto& setRef = adjSets[static_cast<size_t>(i)];
+        neighbours[static_cast<size_t>(i)] = std::vector<int>(setRef.begin(), setRef.end());
+    }
+    return neighbours;
+}
+
+std::vector<Eigen::Vector2i> buildUniqueEdgesFromFaces(const MatX3i& F) {
+    std::set<std::pair<int, int>> edgeSet;
+    auto addEdge = [&edgeSet](int a, int b) {
+        if (a > b) std::swap(a, b);
+        edgeSet.emplace(a, b);
+    };
+
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        addEdge(F(fi, 0), F(fi, 1));
+        addEdge(F(fi, 1), F(fi, 2));
+        addEdge(F(fi, 2), F(fi, 0));
+    }
+
+    std::vector<Eigen::Vector2i> edges;
+    edges.reserve(edgeSet.size());
+    for (const auto& edge : edgeSet) {
+        edges.emplace_back(edge.first, edge.second);
+    }
+    return edges;
+}
+
+double computeMeanEdgeLengthFromFaces(const MatX3d& X, const MatX3i& F) {
+    double sumLen = 0.0;
+    int edgeCount = 0;
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        const int i0 = F(fi, 0);
+        const int i1 = F(fi, 1);
+        const int i2 = F(fi, 2);
+        if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= X.rows() || i1 >= X.rows() || i2 >= X.rows()) continue;
+        const Vec3 p0 = X.row(i0).transpose();
+        const Vec3 p1 = X.row(i1).transpose();
+        const Vec3 p2 = X.row(i2).transpose();
+        sumLen += (p1 - p0).norm();
+        sumLen += (p2 - p1).norm();
+        sumLen += (p0 - p2).norm();
+        edgeCount += 3;
+    }
+    if (edgeCount == 0) return 0.0;
+    return sumLen / static_cast<double>(edgeCount);
 }
 
 Weights computeCotangentWeightsCgl(const std::vector<Vec3>& x, const std::vector<Face>& faces) {
