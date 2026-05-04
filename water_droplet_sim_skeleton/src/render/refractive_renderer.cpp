@@ -847,6 +847,7 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera&
         supportSurfaceShader_.setMat4("uView", matrices.view);
         supportSurfaceShader_.setMat4("uProj", matrices.proj);
         supportSurfaceShader_.setFloat("uOpacity", static_cast<float>(scene.surface().renderParams().opacity));
+        supportSurfaceShader_.setVec3("uTintColor", toGlm(scene.surface().renderParams().tintColor));
         supportSurfaceShader_.setVec3("uLightDir", toGlm(causticSunDir_));
 
         const auto* plane = dynamic_cast<const PlaneSurface*>(&scene.surface());
