@@ -57,12 +57,12 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    // Baseline scales aligned with python_sim_dev/water_sim_basic.cpp.
-    double surfaceTension = 0.5;           // gamma
-    double viscousDamping = 0.3;           // mu
-    double laplacianViscosity = 0.05;      // eta
+    // Tuned defaults: allow capillary lift without overdamping lower vertices.
+    double surfaceTension = 120.0;         // gamma
+    double viscousDamping = 0.8;           // mu
+    double laplacianViscosity = 0.2;       // eta
     double volumeStiffness = 2000.0;       // k_v
-    double density = 1.0;
+    double density = 0.4;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = false;
 };
