@@ -30,26 +30,6 @@ public:
     void apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const;
 };
 
-class ContactBandEdgeProjector {
-public:
-    void apply(Droplet& drop,
-               const ISurface& surface,
-               double adhesionDist,
-               double targetRatio,
-               int iterations,
-               double relaxation) const;
-};
-
-class ContactBandEdgeProjector {
-public:
-    void apply(Droplet& drop,
-               const ISurface& surface,
-               double adhesionDist,
-               double targetRatio,
-               int iterations,
-               double relaxation) const;
-};
-
 class VolumeCorrector {
 public:
     double computeClosedVolume(const Droplet& drop, const ISurface& surface) const;
