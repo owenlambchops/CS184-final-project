@@ -128,13 +128,16 @@ void Droplet::updateDerived() {
             const double largest = std::max(vals(2), 1e-12);
             const double smallest = std::max(vals(1), 1e-12);
             derived_.elongationRatio = std::sqrt(largest / smallest);
+            derived_.minorAxisRadius = derived_.footprintRadius / std::max(derived_.elongationRatio, 1e-12);
             derived_.principalAxis = axis;
         } else {
             derived_.elongationRatio = 1.0;
+            derived_.minorAxisRadius = derived_.footprintRadius;
             derived_.principalAxis = Vec3::UnitX();
         }
     } else {
         derived_.footprintRadius = 0.0;
+        derived_.minorAxisRadius = 0.0;
         derived_.elongationRatio = 1.0;
         derived_.principalAxis = Vec3::UnitX();
     }

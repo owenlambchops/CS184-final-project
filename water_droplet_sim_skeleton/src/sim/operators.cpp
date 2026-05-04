@@ -199,32 +199,93 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 // v_i <- v_i + a_st,i * dt
 // (same discrete form as the working python_sim_dev/water_sim_basic.cpp path)
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
-    const auto& X = drop.positions();
+    // Note: Removed the 'const' from X so we can assign the new solved positions to it.
+    auto& X = drop.positions();
     auto& U = drop.velocities();
     const auto& N = drop.derived().vertexNormals;
-    if (X.rows() == 0 || dt <= 0.0) return;
+    
+    const int num_vertices = X.rows();
+    if (num_vertices == 0 || dt <= 0.0) return;
 
-    const auto neighbours = buildNeighbours(drop.faces(), X.rows());
-    const Weights w = computeCotangentWeights(X, drop.faces());
-    const MatX3d lapX = computeLaplacian(X, neighbours, w);
+    const auto neighbours = buildNeighbours(drop.faces(), num_vertices);
+    Weights w = computeCotangentWeights(X, drop.faces());
+    const std::vector<double> lumpedAreas = computeLumpedAreas(drop);
 
-    // Zhang et al. volume-preservation pressure term:
-    // f_vol,i = k_v (V0 - V) n_i,  a_vol,i = f_vol,i / rho.
-    // We apply it in the same acceleration accumulation path as curvature force.
+    // 1. Calculate physical parameters
     const double V0 = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
     const double V = drop.derived().currentVolume;
-    const double volumeStiffness = std::max(0.0, drop.material().volumeStiffness); // k_v
+    const double volumeStiffness = std::max(0.0, drop.material().volumeStiffness);
     const double vp = volumeStiffness * (V0 - V) / std::max(drop.material().density, 1e-8);
+    
+    // gamma is the surface tension divided by density
+    const double gamma = drop.material().surfaceTension / std::max(drop.material().density, 1e-8);
 
-    const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
-    U += scale * lapX;
-    for (int i = 0; i < U.rows(); ++i) {
-        Vec3 ni = N.row(i).transpose();
-        const double nn = ni.norm();
-        if (nn <= 1e-12) continue;
-        ni /= nn;
-        U.row(i) += (vp * dt * ni).transpose();
+    // 2. Build the Sparse Matrix A and Right-Hand Side (RHS) B
+    // Equation: (M + gamma * dt * L) * X_new = M * X_old
+    std::vector<Eigen::Triplet<double>> triplets;
+    triplets.reserve(num_vertices * 7); // Estimate: 1 diagonal + ~6 neighbours per vertex
+
+    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(num_vertices, 3);
+
+    for (int i = 0; i < num_vertices; ++i) {
+        const double m_i = lumpedAreas[i];
+
+        // --- RIGHT HAND SIDE ---
+        // B_i = M_ii * X_old_i
+        // We also integrate your volume preservation force directly into the target position
+        Eigen::Vector3d n_i = N.row(i).transpose();
+        if (n_i.norm() > 1e-12) n_i.normalize();
+        
+        Eigen::Vector3d explicit_vol_displacement = (vp * dt) * n_i;
+        B.row(i) = m_i * (X.row(i).transpose() + explicit_vol_displacement);
+
+        // --- LEFT HAND SIDE (Sparse Matrix A) ---
+        double L_ii = 0.0;
+
+        for (int j : neighbours[i]) {
+            // Note: You will need to adapt this line based on how your 'Weights' struct works.
+            // If it's a 2D array, map, or accessed via half-edges, retrieve the weight for edge (i, j).
+            double w_ij = w[i][j];
+
+            // Cotangent Laplacian off-diagonal is -w_ij
+            double L_ij = -w_ij;
+            double A_ij = gamma * dt * L_ij;
+
+            triplets.push_back(Eigen::Triplet<double>(i, j, A_ij));
+            
+            // Sum weights for the diagonal entry of L
+            L_ii += w_ij;
+        }
+
+        // Diagonal entry: M_ii + gamma * dt * L_ii
+        double A_ii = m_i + gamma * dt * L_ii;
+        triplets.push_back(Eigen::Triplet<double>(i, i, A_ii));
     }
+
+    Eigen::SparseMatrix<double> A(num_vertices, num_vertices);
+    A.setFromTriplets(triplets.begin(), triplets.end());
+
+    // 3. Solve the Linear System using Cholesky Decomposition
+    // SimplicialLDLT is the optimal Eigen solver for Symmetric Positive Definite matrices
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
+    solver.compute(A);
+
+    if (solver.info() != Eigen::Success) {
+        // Factorization failed (usually due to degenerate mesh/negative areas causing A to lose SPD property)
+        return; 
+    }
+
+    Eigen::MatrixXd X_new = solver.solve(B);
+
+    if (solver.info() != Eigen::Success) {
+        // Solve step failed
+        return; 
+    }
+
+    // 4. Update Velocities and Positions 
+    // We infer the new stable velocity from the implicitly solved position delta
+    U = (X_new - X) / dt;
+    X = X_new;
 }
 
 // Contact-angle hysteresis operator near the contact line.

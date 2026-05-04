@@ -31,6 +31,9 @@ find_package(imgui CONFIG REQUIRED)
 find_package(libigl CONFIG REQUIRED)
 find_path(STB_INCLUDE_DIR NAMES stb_image.h REQUIRED)
 
+# CGAL for robust polygon mesh processing and boolean operations
+find_package(CGAL REQUIRED COMPONENTS Core)
+
 add_library(wd_core
     src/core/scene.cpp
     src/surface/plane_surface.cpp
@@ -69,6 +72,7 @@ target_link_libraries(wd_core PUBLIC
     igl::igl_opengl
     igl::igl_glfw
     igl::igl_imgui
+    CGAL::CGAL
 )
 
 target_compile_options(wd_core PRIVATE

@@ -25,4 +25,13 @@ void computeLaplaciansCgl(
         std::vector<Vec3>& deltaX,
         std::vector<Vec3>& deltaV);
 
+// Convert two triangle meshes (vertices+faces) into a boolean union using CGAL.
+// Returns true on success and fills outX/outF with the resulting mesh.
+bool booleanUnionMeshes(
+        const MatX3d& A_X,
+        const MatX3i& A_F,
+        const MatX3d& B_X,
+        const MatX3i& B_F,
+        MatX3d& outX,
+        MatX3i& outF);
 } // namespace wd

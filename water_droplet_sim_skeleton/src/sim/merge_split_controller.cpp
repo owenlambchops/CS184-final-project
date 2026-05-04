@@ -36,7 +36,7 @@ void MergeSplitController::process(std::vector<std::unique_ptr<Droplet>>& drople
 }
 
 bool MergeSplitController::shouldMerge(const Droplet& a, const Droplet& b) const {
-    double threshold = mergeDistanceFactor * (a.derived().footprintRadius + b.derived().footprintRadius);
+    double threshold = mergeDistanceFactor * (a.derived().minorAxisRadius + b.derived().minorAxisRadius);
     return (a.derived().centerOfMass - b.derived().centerOfMass).norm() < threshold;
 }
 

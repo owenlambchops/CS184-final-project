@@ -17,6 +17,7 @@ struct DropletDerivedData {
     double maxEdgeLength = 0.0;
     double restMeanEdgeLength = 0.0;
     double footprintRadius = 0.0;
+    double minorAxisRadius = 0.0;
     double elongationRatio = 1.0;
     Vec3 principalAxis = Vec3::UnitX();
 };

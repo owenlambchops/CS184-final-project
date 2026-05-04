@@ -3,6 +3,16 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <unordered_map>
+
+// CGAL
+#include <CGAL/Simple_cartesian.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Polygon_mesh_processing/measure.h>
+#include <CGAL/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/boost/graph/helpers.h>
+
+namespace PMP = CGAL::Polygon_mesh_processing;
 
 namespace wd {
 
@@ -201,6 +211,96 @@ void computeLaplaciansCgl(
             deltaV[i] /= sumW;
         }
     }
+}
+
+} // namespace wd
+
+namespace wd {
+
+// Helper: convert MatX3d/MatX3i -> CGAL::Surface_mesh
+static bool to_cgal_mesh(const wd::MatX3d& X, const wd::MatX3i& F, CGAL::Surface_mesh<CGAL::Simple_cartesian<double>::Point_3>& out) {
+    using Kernel = CGAL::Simple_cartesian<double>;
+    using Point = Kernel::Point_3;
+    out.clear();
+    try {
+        std::vector<CGAL::Surface_mesh<Point>::Vertex_index> verts;
+        verts.reserve(static_cast<size_t>(X.rows()));
+        for (int i = 0; i < X.rows(); ++i) {
+            verts.push_back(out.add_vertex(Point(X(i, 0), X(i, 1), X(i, 2))));
+        }
+        for (int fi = 0; fi < F.rows(); ++fi) {
+            const int a = F(fi, 0);
+            const int b = F(fi, 1);
+            const int c = F(fi, 2);
+            if (a < 0 || b < 0 || c < 0) continue;
+            out.add_face(verts[static_cast<size_t>(a)], verts[static_cast<size_t>(b)], verts[static_cast<size_t>(c)]);
+        }
+    } catch (...) {
+        return false;
+    }
+    return true;
+}
+
+// Helper: convert CGAL::Surface_mesh -> MatX3d/MatX3i
+static void from_cgal_mesh(const CGAL::Surface_mesh<CGAL::Simple_cartesian<double>::Point_3>& in, wd::MatX3d& X, wd::MatX3i& F) {
+    using Kernel = CGAL::Simple_cartesian<double>;
+    using Point = Kernel::Point_3;
+    std::vector<CGAL::Surface_mesh<Point>::Vertex_index> vmap;
+    vmap.reserve(num_vertices(in));
+    std::unordered_map<CGAL::Surface_mesh<Point>::Vertex_index, int> indexMap;
+    int idx = 0;
+    X.resize(num_vertices(in), 3);
+    for (auto v : in.vertices()) {
+        const Point& p = in.point(v);
+        X(idx, 0) = p.x();
+        X(idx, 1) = p.y();
+        X(idx, 2) = p.z();
+        indexMap[v] = idx;
+        ++idx;
+    }
+    int faceCount = static_cast<int>(num_faces(in));
+    F.resize(faceCount, 3);
+    int fi = 0;
+    for (auto f : in.faces()) {
+        std::vector<int> verts;
+        for (auto v : CGAL::vertices_around_face(in.halfedge(f), in)) {
+            verts.push_back(indexMap[v]);
+        }
+        if (verts.size() >= 3) {
+            F(fi, 0) = verts[0];
+            F(fi, 1) = verts[1];
+            F(fi, 2) = verts[2];
+            ++fi;
+        }
+    }
+    if (fi != faceCount) {
+        F.conservativeResize(fi, 3);
+    }
+}
+
+bool booleanUnionMeshes(
+    const wd::MatX3d& A_X,
+    const wd::MatX3i& A_F,
+    const wd::MatX3d& B_X,
+    const wd::MatX3i& B_F,
+    wd::MatX3d& outX,
+    wd::MatX3i& outF) {
+    using Kernel = CGAL::Simple_cartesian<double>;
+    using Point = Kernel::Point_3;
+    using Mesh = CGAL::Surface_mesh<Point>;
+
+    Mesh mA, mB, mOut;
+    if (!to_cgal_mesh(A_X, A_F, mA)) return false;
+    if (!to_cgal_mesh(B_X, B_F, mB)) return false;
+
+    try {
+        PMP::corefine_and_compute_union(mA, mB, mOut);
+    } catch (...) {
+        return false;
+    }
+
+    from_cgal_mesh(mOut, outX, outF);
+    return true;
 }
 
 } // namespace wd
