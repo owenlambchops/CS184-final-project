@@ -105,11 +105,6 @@ void PlaneSurface::setSideLength(double sideLength) {
     sideLength_ = std::max(kMinSideLength, sideLength);
 }
 
-void PlaneSurface::setNormal(const Vec3& normal) {
-    normal_ = safeNormalize(normal, Vec3::UnitY());
-    buildPlaneFrame(normal_, tangentU_, tangentV_);
-}
-
 bool PlaneSurface::containsProjection(const Vec3& projectedPoint) const {
     const Vec3 local = projectedPoint - origin_;
     const double half = 0.5 * sideLength_;

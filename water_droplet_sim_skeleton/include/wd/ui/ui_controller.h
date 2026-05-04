@@ -1,4 +1,5 @@
 #pragma once
+
 #include "wd/core/types.h"
 #include "wd/sim/merge_split_controller.h"
 
@@ -12,8 +13,6 @@ struct UiActions {
     bool saveScreenshot = false;
     bool setPlaneSideLength = false;
     double planeSideLength = 0.0;
-    bool setPlaneTiltEnabled = false;
-    bool planeTiltEnabled = true;
     bool setPlaneTiltMaxDeg = false;
     double planeTiltMaxDeg = 15.0;
     bool setPlaneTiltResponsiveness = false;

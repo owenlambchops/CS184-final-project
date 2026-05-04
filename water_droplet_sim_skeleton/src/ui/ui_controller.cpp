@@ -17,8 +17,6 @@ constexpr const char* kDebugViewLabels[] = {
     "Thickness",
     "Wireframe",
     "Caustics",
-    "Wireframe",
-    "Caustics",
 };
 
 } // namespace

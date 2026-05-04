@@ -9,11 +9,13 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -405,7 +407,7 @@ void App::render() {
         if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
         if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
         if (actions.resetPlaneAndDisableInteraction) {
-            if (planeSurface) planeSurface->setNormal(Vec3::UnitY());
+            restartSimulation();
             // Plane tilt and interaction always enabled
             interactionsEnabled_ = true;
             if (dragField_) dragField_->setActive(true);
@@ -481,8 +483,6 @@ void App::shutdown() {
     input_.reset();
     sim_.reset();
     renderer_.reset();
-
-    shutdownImGui();
 
     if (window_ != nullptr) {
         glfwDestroyWindow(window_);
