@@ -34,16 +34,6 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
 
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
         if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
-        if (params_.enableContactBandEdgeProjection) {
-            contactBandProjector_.apply(
-                    drop,
-                    surface,
-                    params_.adhesionDistance,
-                    params_.contactBandProjTargetRatio,
-                    params_.contactBandProjIterations,
-                    params_.contactBandProjRelaxation);
-        }
-
 
         // Volume correction must run on the live droplet state.
         // This preserves local-first/global-second logic in VolumeCorrector::apply:

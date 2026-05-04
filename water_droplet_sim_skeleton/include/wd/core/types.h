@@ -57,12 +57,14 @@ struct PickHit {
 };
 
 struct MaterialParams {
-    double surfaceTension = 10.00;           // gamma
-    double viscousDamping = 0.50;          // mu
-    double laplacianViscosity = 0.30;      // eta
+    // Baseline scales aligned with python_sim_dev/water_sim_basic.cpp.
+    double surfaceTension = 0.5;           // gamma
+    double viscousDamping = 0.3;           // mu
+    double laplacianViscosity = 0.05;      // eta
+    double volumeStiffness = 2000.0;       // k_v
     double density = 1.0;
     bool enableLocalVolumeCorrection = false;
-    bool enableGlobalVolumeCorrection = true;
+    bool enableGlobalVolumeCorrection = false;
 };
 
 struct SurfaceMaterialParams {
@@ -97,10 +99,6 @@ struct SolverParams {
     bool enableContactAngle = false;
     bool enableVolumeCorrect = true;
     bool enableVertexRepulsion = false;
-    // Not part of the Zhang/python baseline force model; keep off by default
-    // to avoid injecting extra shape constraints that can destabilize zero-g cases.
-    bool enableContactBandEdgeProjection = false;
-    int remeshMaxOpsPerSubstep = 32;
     
     double collisionPushoutEps = 1e-4;
     double adhesionDistance = 0.005;

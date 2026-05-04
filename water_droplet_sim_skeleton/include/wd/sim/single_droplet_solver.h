@@ -24,8 +24,6 @@ private:
     ViscosityOperator viscosity_;
     CurvatureFlowOperator curvature_;
     ContactLineOperator contact_;
-    VertexRepulsionOperator repulsion_;
-    ContactBandEdgeProjector contactBandProjector_;
     VolumeCorrector volume_;
 };
 

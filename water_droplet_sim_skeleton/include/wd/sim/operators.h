@@ -30,11 +30,6 @@ public:
     void apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const;
 };
 
-class VertexRepulsionOperator {
-public:
-    void apply(Droplet& drop, double dt, double targetRatio, double strength, double maxAccel) const;
-};
-
 class ContactBandEdgeProjector {
 public:
     void apply(Droplet& drop,
