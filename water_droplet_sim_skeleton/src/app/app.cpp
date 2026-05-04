@@ -400,31 +400,27 @@ void App::update() {
 void App::updateCameraControls(double dt) {
     if (!input_ || window_ == nullptr) return;
 
-    const InputState& state = input_->state();
     const bool rightDown = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    double mouseX = 0.0, mouseY = 0.0;
+    glfwGetCursorPos(window_, &mouseX, &mouseY);
     // ── Right-click orbit ─────────────────────────────────────────────────────
-    if (state.rightDown) {
-        if (!cameraRightDragActive_) {
-            cameraRightDragActive_ = true;
-        } else {
-            const double dx = state.mouseX - lastCameraMouseX_;
-            const double dy = state.mouseY - lastCameraMouseY_;
-            // Rotate camera around origin
-            const double sensitivity = 0.0025;
+    if (rightDown) {
+        if (cameraRightDragActive_) {
+            const double dx = mouseX - lastCameraMouseX_;
+            const double dy = mouseY - lastCameraMouseY_;
+            constexpr double kSensitivity = 0.0025;
+
             Vec3 pos = camera_.position();
-            // Azimuth rotation (around Y)
-            double azimuth = -dx * sensitivity;
-            Eigen::AngleAxisd rotY(azimuth, Vec3::UnitY());
+            Eigen::AngleAxisd rotY(-dx * kSensitivity, Vec3::UnitY());
             pos = rotY * pos;
-            // Elevation rotation (around camera right)
             Vec3 right = pos.cross(Vec3::UnitY()).normalized();
-            double elevation = -dy * sensitivity;
-            Eigen::AngleAxisd rotR(elevation, right);
+            Eigen::AngleAxisd rotR(-dy * kSensitivity, right);
             pos = rotR * pos;
             camera_.setPosition(pos);
         }
-        lastCameraMouseX_ = state.mouseX;
-        lastCameraMouseY_ = state.mouseY;
+        cameraRightDragActive_ = true;
+        lastCameraMouseX_ = mouseX;
+        lastCameraMouseY_ = mouseY;
     } else {
         cameraRightDragActive_ = false;
     }
@@ -440,14 +436,6 @@ void App::updateCameraControls(double dt) {
     if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) pos += right   * kMoveSpeed * dt;
     if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) pos -= right   * kMoveSpeed * dt;
     camera_.setPosition(pos);
-
-    // ── Scroll zoom ───────────────────────────────────────────────────────────
-    constexpr double kScrollSpeed = 0.5;
-    if (state.scrollY != 0.0) {
-        Vec3 p = camera_.position();
-        Vec3 fwd = (Vec3::Zero() - p).normalized();
-        camera_.setPosition(p + fwd * state.scrollY * kScrollSpeed);
-    }
 }
 
 void App::render() {
