@@ -106,7 +106,10 @@ void CollisionProjector::apply(
 
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance < adhesionDist) {
+        // Match python_sim_dev/water_sim_basic.cpp behavior:
+        // only hard-project when penetrating the surface (distance < 0).
+        // Vertices in the adhesion band [0, adhesionDist] should not be forcibly snapped.
+        if (s.signedDistance < 0.0) {
             // 1) Project penetrated vertex to the closest point on the solid.
             X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
