@@ -155,7 +155,22 @@ bool App::initialize() {
 bool App::initializeImGui() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_WindowBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.98f);
+    colors[ImGuiCol_PopupBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.98f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.97f, 0.97f, 0.97f, 1.0f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.93f, 0.93f, 0.93f, 1.0f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.90f, 0.90f, 0.90f, 1.0f);
+    colors[ImGuiCol_Button] = ImVec4(0.95f, 0.95f, 0.95f, 1.0f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.90f, 0.90f, 0.90f, 1.0f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
+    colors[ImGuiCol_Header] = ImVec4(0.94f, 0.94f, 0.94f, 1.0f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.89f, 0.89f, 0.89f, 1.0f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.84f, 0.84f, 0.84f, 1.0f);
+    colors[ImGuiCol_Text] = ImVec4(0.08f, 0.08f, 0.08f, 1.0f);
+    colors[ImGuiCol_Border] = ImVec4(0.82f, 0.82f, 0.82f, 1.0f);
 
     if (!ImGui_ImplGlfw_InitForOpenGL(window_, true)) {
         std::cerr << "Failed to initialize ImGui GLFW backend.\n";
@@ -181,6 +196,7 @@ void App::initializeGlState() {
 
 void App::buildDefaultScene() {
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
+    scene_.surface().material().friction = 0.02;
 
     auto composite = std::make_shared<CompositeForceField>();
     gravityField_ = std::make_shared<ConstantForceField>(gravityLikeForce_);
@@ -322,6 +338,13 @@ void App::update() {
     lastFrameTimeSec_ = now;
 
     if (input_) input_->beginFrame();
+
+    // Always update mouse position for interaction
+    double mouseX = 0.0, mouseY = 0.0;
+    if (window_) {
+        glfwGetCursorPos(window_, &mouseX, &mouseY);
+        input_->setMousePosition(mouseX, mouseY);
+    }
     const bool imguiWantsMouse = imguiInitialized_ && ImGui::GetIO().WantCaptureMouse;
     if (!imguiWantsMouse) {
         updateCameraControls(dt);
@@ -375,19 +398,16 @@ void App::render() {
         if (actions.setPlaneSideLength && planeSurface) {
             planeSurface->setSideLength(actions.planeSideLength);
         }
-        if (actions.setPlaneTiltEnabled) planeTiltParams_.enabled = actions.planeTiltEnabled;
+        // Plane tilt always enabled
+        planeTiltParams_.enabled = true;
         if (actions.setPlaneTiltMaxDeg) planeTiltParams_.maxTiltDeg = actions.planeTiltMaxDeg;
         if (actions.setPlaneTiltResponsiveness) planeTiltParams_.responsiveness = actions.planeTiltResponsiveness;
         if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
         if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
         if (actions.resetPlaneAndDisableInteraction) {
             if (planeSurface) planeSurface->setNormal(Vec3::UnitY());
-            planeTiltParams_.enabled = false;
-            interactionsEnabled_ = false;
-            if (dragField_) dragField_->setActive(false);
-        } else if (actions.resetPlaneAndDisableInteraction == false) {
+            // Plane tilt and interaction always enabled
             interactionsEnabled_ = true;
-            planeTiltParams_.enabled = true;
             if (dragField_) dragField_->setActive(true);
         }
         if (actions.disable_tilt) {

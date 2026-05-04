@@ -6,6 +6,7 @@ out vec4 FragColor;
 uniform sampler2D uCausticMap;
 uniform sampler2D uDropletShadowDepth;
 uniform float uOpacity;
+uniform vec3 uTintColor;
 uniform int uEnableCaustics;
 uniform int uEnableShadows;
 uniform vec3 uLightDir;
@@ -14,6 +15,20 @@ uniform vec3 uPlaneOrigin;
 uniform vec3 uPlaneTangentU;
 uniform vec3 uPlaneTangentV;
 uniform float uPlaneSideLength;
+
+float sampleDropletShadow(vec2 uv, float fragDepth, float bias) {
+    float shadowSum = 0.0;
+    vec2 texel = 1.0 / vec2(textureSize(uDropletShadowDepth, 0));
+    // 3x3 PCF for a soft real-time approximation.
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 offset = vec2(float(x), float(y)) * texel;
+            float dropletDepth = texture(uDropletShadowDepth, uv + offset).r;
+            shadowSum += (dropletDepth + bias < fragDepth) ? 1.0 : 0.0;
+        }
+    }
+    return shadowSum / 9.0;
+}
 
 void main() {
     vec3 n = normalize(vWorldNormal);
@@ -29,19 +44,21 @@ void main() {
         float fragDepth = lightNdc.z * 0.5 + 0.5;
 
         if (all(greaterThanEqual(shadowUv, vec2(0.0))) && all(lessThanEqual(shadowUv, vec2(1.0)))) {
-            float dropletDepth = texture(uDropletShadowDepth, shadowUv).r;
             float depthBias = 0.0015;
-            shadow = (dropletDepth + depthBias < fragDepth) ? 0.35 : 1.0;
+            float shadowFactor = sampleDropletShadow(shadowUv, fragDepth, depthBias);
+            shadow = mix(1.0, 0.18, shadowFactor);
         }
     }
 
-    vec3 color = vec3(1.0) * (0.22 + 0.78 * lambert * shadow);
+    vec3 color = uTintColor * (0.22 + 0.78 * lambert * shadow);
+
+    // Add caustics on top of the shadowed base color, not multiplied by shadow
     if (uEnableCaustics != 0 && uPlaneSideLength > 0.0) {
         vec3 local = vWorldPosition - uPlaneOrigin;
         vec2 causticUv = vec2(dot(local, uPlaneTangentU), dot(local, uPlaneTangentV)) / uPlaneSideLength + vec2(0.5);
         if (all(greaterThanEqual(causticUv, vec2(0.0))) && all(lessThanEqual(causticUv, vec2(1.0)))) {
             float caustic = texture(uCausticMap, causticUv).r;
-            color += caustic * vec3(1.0, 0.94, 0.72);
+            color += caustic * vec3(1.0, 0.94, 0.72); // Add caustics after shadow
         }
     }
     FragColor = vec4(color, clamp(uOpacity, 0.0, 1.0));
