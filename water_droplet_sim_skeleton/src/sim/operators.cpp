@@ -213,7 +213,7 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
     // We apply it in the same acceleration accumulation path as curvature force.
     const double V0 = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
     const double V = drop.derived().currentVolume;
-    const double volumeStiffness = 2000.0; // k_v (matches water_sim_basic default scale)
+    const double volumeStiffness = std::max(0.0, drop.material().volumeStiffness); // k_v
     const double vp = volumeStiffness * (V0 - V) / std::max(drop.material().density, 1e-8);
 
     const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;

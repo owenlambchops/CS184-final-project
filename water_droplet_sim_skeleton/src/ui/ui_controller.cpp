@@ -23,7 +23,7 @@ constexpr const char* kDebugViewLabels[] = {
 
 UiActions UiController::draw(SolverParams& solverParams,
                              RenderParams& renderParams,
-                             MaterialParams&,
+                             MaterialParams& defaultMaterial,
                              SurfaceMaterialParams& surfaceMaterial,
                              SurfaceRenderParams& surfaceRender,
                              double planeSideLength,
@@ -75,6 +75,41 @@ UiActions UiController::draw(SolverParams& solverParams,
         renderParams.absorptionStrength = std::max(renderParams.absorptionStrength, 0.0);
     }
 
+    if (ImGui::CollapsingHeader("Rendering")) {
+        ImGui::Checkbox("Caustics", &renderParams.enableCaustics);
+        ImGui::Checkbox("Thickness Pass", &renderParams.enableThickness);
+
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Fresnel Bias", ImGuiDataType_Double, &renderParams.fresnelBias, 0.005f, nullptr, nullptr, "%.3f");
+        renderParams.fresnelBias = std::clamp(renderParams.fresnelBias, 0.0, 1.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Fresnel Scale", ImGuiDataType_Double, &renderParams.fresnelScale, 0.005f, nullptr, nullptr, "%.3f");
+        renderParams.fresnelScale = std::clamp(renderParams.fresnelScale, 0.0, 2.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Fresnel Power", ImGuiDataType_Double, &renderParams.fresnelPower, 0.05f, nullptr, nullptr, "%.3f");
+        renderParams.fresnelPower = std::max(renderParams.fresnelPower, 0.1);
+
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Max Thickness", ImGuiDataType_Double, &renderParams.maxThickness, 0.01f, nullptr, nullptr, "%.3f");
+        renderParams.maxThickness = std::max(renderParams.maxThickness, 0.001);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Caustic Strength", ImGuiDataType_Double, &renderParams.causticStrength, 0.01f, nullptr, nullptr, "%.3f");
+        renderParams.causticStrength = std::max(renderParams.causticStrength, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Caustic Point Size", ImGuiDataType_Double, &renderParams.causticPointSize, 0.05f, nullptr, nullptr, "%.3f");
+        renderParams.causticPointSize = std::max(renderParams.causticPointSize, 0.1);
+
+        float absorption[3] = {
+            static_cast<float>(renderParams.absorptionColor.x()),
+            static_cast<float>(renderParams.absorptionColor.y()),
+            static_cast<float>(renderParams.absorptionColor.z()),
+        };
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::ColorEdit3("Absorption Color", absorption)) {
+            renderParams.absorptionColor = Vec3(absorption[0], absorption[1], absorption[2]);
+        }
+    }
+
     if (ImGui::CollapsingHeader("Surface")) {
         if (planeSideLength > 0.0) {
             double editedSideLength = planeSideLength;
@@ -91,12 +126,38 @@ UiActions UiController::draw(SolverParams& solverParams,
         if (ImGui::Button("Enable Tilt")) {
             actions.resetPlaneAndDisableInteraction = false;
         }
+        if (ImGui::Button("Disable Tilt")) {
+            actions.disable_tilt = true;
+        }
         ImGui::SetNextItemWidth(vectorInputWidth);
         ImGui::DragScalar("Friction", ImGuiDataType_Double, &surfaceMaterial.friction, 0.01f, nullptr, nullptr, "%.3f");
         surfaceMaterial.friction = std::max(surfaceMaterial.friction, 0.0);
         ImGui::SetNextItemWidth(vectorInputWidth);
         ImGui::DragScalar("Adhesion", ImGuiDataType_Double, &solverParams.adhesionDistance, 0.005f, nullptr, nullptr, "%.3f");
         solverParams.adhesionDistance = std::max(solverParams.adhesionDistance, 0.0);
+    }
+
+    if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        if (ImGui::SliderInt("Mesh Points", &meshSubdivisions_, 0, 5)) {
+            actions.setMeshSubdivisions = true;
+            actions.meshSubdivisions = meshSubdivisions_;
+        }
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Surface Tension", ImGuiDataType_Double, &defaultMaterial.surfaceTension, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.surfaceTension = std::max(defaultMaterial.surfaceTension, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Damping", ImGuiDataType_Double, &defaultMaterial.viscousDamping, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.viscousDamping = std::max(defaultMaterial.viscousDamping, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Viscosity", ImGuiDataType_Double, &defaultMaterial.laplacianViscosity, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.laplacianViscosity = std::max(defaultMaterial.laplacianViscosity, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Volume Stiffness", ImGuiDataType_Double, &defaultMaterial.volumeStiffness, 1.0f, nullptr, nullptr, "%.1f");
+        defaultMaterial.volumeStiffness = std::max(defaultMaterial.volumeStiffness, 0.0);
+        ImGui::SetNextItemWidth(vectorInputWidth);
+        ImGui::DragScalar("Density", ImGuiDataType_Double, &defaultMaterial.density, 0.01f, nullptr, nullptr, "%.3f");
+        defaultMaterial.density = std::max(defaultMaterial.density, 1e-6);
     }
 
     if (ImGui::CollapsingHeader("Advanced")) {

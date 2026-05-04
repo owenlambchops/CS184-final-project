@@ -50,7 +50,7 @@ private:
     SolverParams solverParams_;
     RenderParams renderParams_;
     MaterialParams defaultMaterial_;
-    Vec3 gravityLikeForce_ = Vec3(0.0, -9.81, 0.0);
+    Vec3 gravityLikeForce_ = Vec3(0.0, -3.5, 0.0);
 
     std::shared_ptr<ConstantForceField> gravityField_;
     std::shared_ptr<DragForceField> dragField_;

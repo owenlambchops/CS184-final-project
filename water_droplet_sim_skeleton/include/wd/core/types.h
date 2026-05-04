@@ -58,11 +58,11 @@ struct PickHit {
 
 struct MaterialParams {
     // Tuned defaults: allow capillary lift without overdamping lower vertices.
-    double surfaceTension = 120.0;         // gamma
-    double viscousDamping = 0.8;           // mu
-    double laplacianViscosity = 0.2;       // eta
+    double surfaceTension = 2000.0;        // gamma
+    double viscousDamping = 5.0;           // mu
+    double laplacianViscosity = 8.0;       // eta
     double volumeStiffness = 2000.0;       // k_v
-    double density = 0.4;
+    double density = 1.0;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = false;
 };
