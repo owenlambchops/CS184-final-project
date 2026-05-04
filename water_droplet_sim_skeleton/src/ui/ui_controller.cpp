@@ -61,11 +61,6 @@ UiActions UiController::draw(SolverParams& solverParams,
         actions.applyGravity = true;
         actions.gravityForce = gravityDraft_;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Apply")) {
-        actions.applyGravity = true;
-        actions.gravityForce = gravityDraft_;
-    }
 
     ImGui::Separator();
     int debugView = static_cast<int>(renderParams.debugView);
@@ -194,9 +189,9 @@ UiActions UiController::draw(SolverParams& solverParams,
         ImGui::DragScalar("Viscosity", ImGuiDataType_Double, &defaultMaterial.laplacianViscosity, 0.01f, nullptr, nullptr, "%.3f");
         defaultMaterial.laplacianViscosity = std::max(defaultMaterial.laplacianViscosity, 0.0);
         ImGui::SetNextItemWidth(vectorInputWidth);
-        ImGui::DragScalar("Volume Stiffness", ImGuiDataType_Double, &defaultMaterial.volumeStiffness, 1.0f, nullptr, nullptr, "%.1f");
-        defaultMaterial.volumeStiffness = std::max(defaultMaterial.volumeStiffness, 0.0);
-        ImGui::SetNextItemWidth(vectorInputWidth);
+        // ImGui::DragScalar("Volume Stiffness", ImGuiDataType_Double, &defaultMaterial.volumeStiffness, 1.0f, nullptr, nullptr, "%.1f");
+        // defaultMaterial.volumeStiffness = std::max(defaultMaterial.volumeStiffness, 0.0);
+        // ImGui::SetNextItemWidth(vectorInputWidth);
         ImGui::DragScalar("Density", ImGuiDataType_Double, &defaultMaterial.density, 0.01f, nullptr, nullptr, "%.3f");
         defaultMaterial.density = std::max(defaultMaterial.density, 1e-6);
         ImGui::SetNextItemWidth(vectorInputWidth);

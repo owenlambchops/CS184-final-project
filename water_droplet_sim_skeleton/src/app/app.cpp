@@ -400,12 +400,16 @@ void App::render() {
         if (actions.setPlaneSideLength && planeSurface) {
             planeSurface->setSideLength(actions.planeSideLength);
         }
-        // Plane tilt always enabled
-        planeTiltParams_.enabled = true;
+        if (actions.setPlaneTiltEnabled) {
+            planeTiltParams_.enabled = actions.planeTiltEnabled;
+        }
         if (actions.setPlaneTiltMaxDeg) planeTiltParams_.maxTiltDeg = actions.planeTiltMaxDeg;
         if (actions.setPlaneTiltResponsiveness) planeTiltParams_.responsiveness = actions.planeTiltResponsiveness;
         if (actions.setPlaneTiltAxisScaleX) planeTiltParams_.axisScaleX = actions.planeTiltAxisScaleX;
         if (actions.setPlaneTiltAxisScaleZ) planeTiltParams_.axisScaleZ = actions.planeTiltAxisScaleZ;
+        if (actions.resetPlaneTilt && planeSurface) {
+            planeSurface->setNormal(Vec3::UnitY());
+        }
         if (actions.resetPlaneAndDisableInteraction) {
             restartSimulation();
             // Plane tilt and interaction always enabled
