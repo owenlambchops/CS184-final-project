@@ -297,8 +297,7 @@ double VolumeCorrector::computeClosedVolume(const Droplet& drop, const ISurface&
 // Zhang et al. formulas used here:
 // - Eq. (10)-(11): area-weighted local normal-velocity averaging/correction
 // - Global correction: d = Delta V / A, x_i <- x_i + d n_i
-void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) const {
-    (void)surface;
+void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
     (void)dt;
 
     auto& X = drop.positions();
@@ -387,13 +386,38 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) c
         }
     }
 
-    // Global volume correction: d = ΔV / A, then x_i += d n_i.
+    // Global volume correction: d = ΔV / A_free, then x_i += d n_i for free vertices only.
+    // Contact-zone vertices are excluded: their mesh normals often point partially INTO the
+    // surface, so a positive correction (d > 0) would push them through the plane and trigger
+    // a collision snap next substep — a pumping cycle that drives the burst oscillation.
     if (doGlobal) {
-        double d = dV / sumArea;
+        // Classify each vertex: free (outside adhesion zone) or contact (inside).
+        std::vector<bool> isFree(n, true);
+        double freeArea = 0.0;
+        if (adhesionDist > 0.0) {
+            for (int i = 0; i < n; ++i) {
+                const SurfaceSample s = surface.closestSample(X.row(i).transpose());
+                if (s.signedDistance < adhesionDist) {
+                    isFree[i] = false;
+                } else {
+                    freeArea += lumpedAreas[i];
+                }
+            }
+        } else {
+            freeArea = sumArea;
+        }
+        // Fallback: if every vertex is in the adhesion zone, correct all (old behavior).
+        if (freeArea < 1e-12) {
+            freeArea = sumArea;
+            std::fill(isFree.begin(), isFree.end(), true);
+        }
+
+        double d = dV / freeArea;
         const double edgeScale = std::max(drop.derived().meanEdgeLength, 1e-8);
         const double maxStep = 0.25 * edgeScale;
         d = std::clamp(d, -maxStep, maxStep);
         for (int i = 0; i < n; ++i) {
+            if (!isFree[i]) continue;
             Vec3 ni = N.row(i).transpose();
             const double nn = ni.norm();
             if (nn <= 1e-12) continue;

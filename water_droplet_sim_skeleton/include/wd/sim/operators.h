@@ -33,7 +33,7 @@ public:
 class VolumeCorrector {
 public:
     double computeClosedVolume(const Droplet& drop, const ISurface& surface) const;
-    void apply(Droplet& drop, const ISurface& surface, double dt) const;
+    void apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist = 0.0) const;
 };
 
 // TODO(remesh-step2): Add true topology-changing remeshing operator.

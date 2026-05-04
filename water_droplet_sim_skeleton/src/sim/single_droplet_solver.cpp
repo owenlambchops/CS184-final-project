@@ -47,13 +47,11 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
         // Volume correction must run on the live droplet state.
         // This preserves local-first/global-second logic in VolumeCorrector::apply:
         // local velocity correction uses current U, then global position correction updates X.
+        // adhesionDist is passed so the global corrector skips contact-zone vertices.
         if (params_.enableVolumeCorrect) {
             drop.updateDerived();
-            volume_.apply(drop, surface, dt);
+            volume_.apply(drop, surface, dt, params_.adhesionDistance);
         }
-
-        // add velocity damping
-        U -= params_.vertexDamping * U * dt;
 
         drop.updateDerived();
     }
