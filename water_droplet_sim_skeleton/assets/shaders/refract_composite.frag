@@ -39,7 +39,7 @@ const int kDebugDropletDepth = 4;
 const int kDebugDropletNormal = 5;
 const int kDebugThickness = 6;
 const int kDebugWireframe = 7;
-const int kDebugCaustics = 7;
+const int kDebugCaustics = 8;
 
 vec2 equirectUv(vec3 dir) {
     vec3 d = normalize(dir);
