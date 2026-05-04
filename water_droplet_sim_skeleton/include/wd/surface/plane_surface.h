@@ -5,17 +5,9 @@ namespace wd {
 
 class PlaneSurface final : public ISurface {
 public:
-    PlaneSurface(const Vec3& origin, const Vec3& normal);
+    PlaneSurface(const Vec3& origin, const Vec3& normal, double sideLength = 6.0);
 
-    void setNormal(const Vec3& normal) {
-        normal_ = safeNormalize(normal, Vec3::UnitY());
-        // Recompute tangent frame (same logic as constructor).
-        Vec3 seed = std::abs(normal_.dot(Vec3::UnitY())) < 0.9
-                        ? Vec3::UnitY() : Vec3::UnitX();
-        tangentU_ = safeNormalize(seed.cross(normal_), Vec3::UnitX());
-        tangentV_ = safeNormalize(normal_.cross(tangentU_), Vec3::UnitZ());
-    }
- 
+    void setNormal(const Vec3& normal);
     void setOrigin(const Vec3& origin) { origin_ = origin; }
 
     SurfaceSample closestSample(const Vec3& worldPoint) const override;
@@ -35,16 +27,18 @@ public:
     const Vec3& tangentU() const { return tangentU_; }
     const Vec3& tangentV() const { return tangentV_; }
     double sideLength() const { return sideLength_; }
-    void setNormal(const Vec3& normal);
     void setSideLength(double sideLength);
 
 private:
+    bool containsProjection(const Vec3& projectedPoint) const;
+
+    static constexpr double kMinSideLength = 0.1;
 
     static Vec3 safeNormalize(const Vec3& v, const Vec3& fallback) {
         double n = v.norm();
         return n > 1e-12 ? v / n : fallback;
     }
-    
+
     Vec3 origin_;
     Vec3 normal_;
     Vec3 tangentU_;

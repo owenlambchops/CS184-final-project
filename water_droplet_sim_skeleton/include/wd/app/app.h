@@ -1,14 +1,18 @@
 #pragma once
+
 #include "wd/core/scene.h"
 #include "wd/experiments/experiment_logger.h"
-#include "wd/forces/droplet_drag_force_field.h"    
+#include "wd/forces/droplet_drag_force_field.h"
 #include "wd/interaction/drag_interactor.h"
 #include "wd/interaction/droplet_drag_interactor.h"
 #include "wd/interaction/input_router.h"
 #include "wd/interaction/plane_tilt_interactor.h"
+#include "wd/render/droplet_gpu_cache.h"
 #include "wd/render/refractive_renderer.h"
 #include "wd/sim/simulation_system.h"
 #include "wd/ui/ui_controller.h"
+
+#include <memory>
 #include <string>
 
 struct GLFWwindow;
@@ -26,7 +30,9 @@ private:
     bool initializeWindow();
     bool initialize();
     bool initializeImGui();
+    bool initializeRenderResources();
     void initializeGlState();
+    void initializePlaneMesh();
     void buildDefaultScene();
     void spawnDropletAt(const Vec3& anchorWorld);
     void restartSimulation();
@@ -34,10 +40,9 @@ private:
     void updateCameraControls(double dt);
     void update();
     void render();
-    void updateCameraControls(double dt);
-    void spawnDropletAt(const Vec3& anchorWorld);
     void rebuildPlaneGpuMesh();
     void destroyRenderResources();
+    void shutdownImGui();
     void shutdown();
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -59,15 +64,19 @@ private:
     std::shared_ptr<DragForceField> dragField_;
     std::shared_ptr<DropletDragForceField> dropletDragField_;
     std::shared_ptr<const DropletTemplate> dropletTemplate_;
-    int nextDropletId_ = 1; 
+    int nextDropletId_ = 1;
 
     std::unique_ptr<InputRouter> input_;
     std::unique_ptr<DragInteractor> dragInteractor_;
     std::unique_ptr<DropletDragInteractor> dropletDragInteractor_;
+    std::unique_ptr<PlaneTiltInteractor> planeTiltInteractor_;
     std::unique_ptr<UiController> ui_;
     std::unique_ptr<SimulationSystem> sim_;
     std::unique_ptr<RefractiveRenderer> renderer_;
     std::unique_ptr<ExperimentLogger> logger_;
+
+    bool imguiInitialized_ = false;
+    std::string runName_;
 
     bool paused_ = false;
     bool pauseKeyWasDown_ = false;
@@ -77,13 +86,21 @@ private:
     bool singleStepRequested_ = false;
     bool screenshotRequested_ = false;
 
-    bool   cameraRightDragActive_ = false;
-    double lastCameraMouseX_      = 0.0;
-    double lastCameraMouseY_      = 0.0;
-    double cameraScrollVelocity_  = 0.0;
+    bool cameraRightDragActive_ = false;
+    double lastCameraMouseX_ = 0.0;
+    double lastCameraMouseY_ = 0.0;
+    double cameraScrollVelocity_ = 0.0;
 
-    double lastFrameTimeSec_          = 0.0;
-    bool   simulationAdvancedThisFrame_ = false;
+    double lastFrameTimeSec_ = 0.0;
+    bool simulationAdvancedThisFrame_ = false;
+
+    unsigned int dropletProgram_ = 0;
+    unsigned int planeProgram_ = 0;
+    unsigned int planeVao_ = 0;
+    unsigned int planeVbo_ = 0;
+    unsigned int planeEbo_ = 0;
+    int planeIndexCount_ = 0;
+    DropletGpuCache dropletCache_;
 };
 
 } // namespace wd

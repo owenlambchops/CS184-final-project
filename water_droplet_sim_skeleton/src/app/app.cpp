@@ -11,11 +11,13 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -31,6 +33,19 @@ namespace wd {
 namespace {
 
 constexpr double kMaxCameraDt = 0.1;
+constexpr double kCameraMouseSensitivity = 0.0025;
+constexpr double kCameraMoveSpeed = 2.0;
+constexpr double kCameraScrollDistance = 6.0;
+constexpr double kCameraScrollSmoothingTime = 0.2;
+
+
+std::string makeTimestampedRunName() {
+    const std::time_t now = std::time(nullptr);
+    const std::tm* local = std::localtime(&now);
+    std::ostringstream out;
+    out << std::put_time(local, "%Y%m%d_%H%M%S");
+    return out.str();
+}
 
 glm::vec3 toGlm(const Vec3& v) {
     return glm::vec3(static_cast<float>(v.x()),
@@ -199,6 +214,10 @@ bool App::initialize() {
     renderer_ = std::make_unique<RefractiveRenderer>();
     renderer_->initialize(width_, height_);
 
+    if (!initializeRenderResources()) {
+        return false;
+    }
+
     // ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -209,6 +228,7 @@ bool App::initialize() {
     input_ = std::make_unique<InputRouter>(window_);
     dragInteractor_ = std::make_unique<DragInteractor>(dragField_);
     dropletDragInteractor_ = std::make_unique<DropletDragInteractor>(dropletDragField_);
+    planeTiltInteractor_ = std::make_unique<PlaneTiltInteractor>();
     ui_ = std::make_unique<UiController>();
     logger_ = std::make_unique<ExperimentLogger>();
     runName_ = makeTimestampedRunName();
@@ -252,6 +272,15 @@ bool App::initializeImGui() {
 
     imguiInitialized_ = true;
     return true;
+}
+
+void App::shutdownImGui() {
+    if (!imguiInitialized_) return;
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    imguiInitialized_ = false;
 }
 
 void App::initializeGlState() {
@@ -323,7 +352,7 @@ void App::buildDefaultScene() {
 
     scene_.setForceField(composite);
 
-    dropletTemplate_ = DropletTemplate::CreateSphericalCap(8, 48, 0.22, 0.20);
+    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(8, 0.22);
     DropletFactory factory(dropletTemplate_);
 
     SpawnDesc desc;
@@ -463,6 +492,11 @@ void App::update() {
 
     if (input_) input_->beginFrame();
 
+    if (input_ && planeTiltInteractor_ && scene_.hasSurface()) {
+        PlaneTiltParams tiltParams;
+        planeTiltInteractor_->update(input_->state(), width_, height_, dt, scene_, tiltParams);
+    }
+
     const bool imguiWantsMouse = ImGui::GetIO().WantCaptureMouse;
 
     if (!imguiWantsMouse) {
@@ -494,47 +528,6 @@ void App::update() {
         singleStepRequested_         = false;
         }
 
-}
-
-void App::updateCameraControls(double dt) {
-    if (!input_ || window_ == nullptr) return;
-
-    const bool rightDown = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-    double mouseX = 0.0, mouseY = 0.0;
-    glfwGetCursorPos(window_, &mouseX, &mouseY);
-    // ── Right-click orbit ─────────────────────────────────────────────────────
-    if (rightDown) {
-        if (cameraRightDragActive_) {
-            const double dx = mouseX - lastCameraMouseX_;
-            const double dy = mouseY - lastCameraMouseY_;
-            constexpr double kSensitivity = 0.0025;
-
-            Vec3 pos = camera_.position();
-            Eigen::AngleAxisd rotY(-dx * kSensitivity, Vec3::UnitY());
-            pos = rotY * pos;
-            Vec3 right = pos.cross(Vec3::UnitY()).normalized();
-            Eigen::AngleAxisd rotR(-dy * kSensitivity, right);
-            pos = rotR * pos;
-            camera_.setPosition(pos);
-        }
-        cameraRightDragActive_ = true;
-        lastCameraMouseX_ = mouseX;
-        lastCameraMouseY_ = mouseY;
-    } else {
-        cameraRightDragActive_ = false;
-    }
-
-    // ── WASD pan ──────────────────────────────────────────────────────────────
-    constexpr double kMoveSpeed = 2.0;
-    Vec3 pos = camera_.position();
-    Vec3 forward = (Vec3::Zero() - pos).normalized();
-    Vec3 right    = forward.cross(Vec3::UnitY()).normalized();
-
-    if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) pos += forward * kMoveSpeed * dt;
-    if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) pos -= forward * kMoveSpeed * dt;
-    if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) pos += right   * kMoveSpeed * dt;
-    if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) pos -= right   * kMoveSpeed * dt;
-    camera_.setPosition(pos);
 }
 
 void App::render() {
@@ -586,6 +579,14 @@ void App::render() {
         solverParams_,
         renderParams_,
         defaultMaterial_,
+        scene_.surface().material(),
+        scene_.surface().renderParams(),
+        dynamic_cast<PlaneSurface*>(&scene_.surface()) ? dynamic_cast<PlaneSurface*>(&scene_.surface())->sideLength() : 0.0,
+        true,
+        15.0,
+        10.0,
+        1.0,
+        1.0,
         gravityLikeForce_,
         sim_->mergeSplitController());
 
@@ -595,16 +596,6 @@ void App::render() {
         gravityLikeForce_ = actions.gravityForce;
         if (gravityField_) gravityField_->setForce(gravityLikeForce_);
     }
-
-    // ── NEW: plane tilt ───────────────────────────────────────────────────────
-    if (actions.tiltPlane && scene_.hasSurface()) {
-        auto* plane = dynamic_cast<PlaneSurface*>(&scene_.surface());
-        if (plane) {
-            plane->setNormal(actions.planeNormal);
-            rebuildPlaneGpuMesh();   // re-uploads the VAO (see below)
-        }
-    }
-    // ─────────────────────────────────────────────────────────────────────────
 
     if (actions.saveScreenshot) screenshotRequested_ = true;
 
@@ -681,10 +672,7 @@ void App::destroyRenderResources() {
 
 void App::shutdown() {
     destroyRenderResources();
-
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    shutdownImGui();
 
     logger_.reset();
     ui_.reset();
@@ -693,8 +681,6 @@ void App::shutdown() {
     input_.reset();
     sim_.reset();
     renderer_.reset();
-
-    shutdownImGui();
 
     if (window_ != nullptr) {
         glfwDestroyWindow(window_);
