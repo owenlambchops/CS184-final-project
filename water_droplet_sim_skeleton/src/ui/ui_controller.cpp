@@ -57,7 +57,11 @@ UiActions UiController::draw(SolverParams& solverParams,
 
     ImGui::Separator();
     ImGui::SetNextItemWidth(vectorInputWidth);
-    ImGui::DragScalarN("Gravity", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f");
+    if (ImGui::DragScalarN("Gravity", ImGuiDataType_Double, gravityDraft_.data(), 3, 0.05f, nullptr, nullptr, "%.3f")) {
+        actions.applyGravity = true;
+        actions.gravityForce = gravityDraft_;
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Apply")) {
         actions.applyGravity = true;
         actions.gravityForce = gravityDraft_;
@@ -130,8 +134,9 @@ UiActions UiController::draw(SolverParams& solverParams,
         }
         ImGui::SameLine();
         if (ImGui::Button("Enable Tilt")) {
-            actions.resetPlaneAndDisableInteraction = false;
+            actions.disable_tilt = false;
         }
+        ImGui::SameLine();
         if (ImGui::Button("Disable Tilt")) {
             actions.disable_tilt = true;
         }
