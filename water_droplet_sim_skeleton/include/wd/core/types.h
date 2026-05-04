@@ -104,7 +104,7 @@ struct SolverParams {
     double adhesionDistance = 0.005;
     double maxVelocity = 15.0;
     double maxInternalAccel = 200.0;
-    double vertexDamping = 0.0;
+    double vertexDamping = 0.2;
     int contactBandProjIterations = 3;
     double contactBandProjRelaxation = 0.2;
     double contactBandProjTargetRatio = 0.9;

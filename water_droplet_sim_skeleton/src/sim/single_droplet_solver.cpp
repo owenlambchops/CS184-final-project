@@ -32,6 +32,15 @@ void SingleDropletSolver::step(Droplet& drop, const ISurface& surface, const IFo
             U = U.array().min(speedClamp).max(-speedClamp);
         }
 
+        // Additional per-vertex velocity damping:
+        // v <- v * max(0, 1 - c * dt), where c = params_.vertexDamping.
+        // This is a simple stable linear drag term applied uniformly.
+        const double vertexDamping = std::max(params_.vertexDamping, 0.0);
+        if (vertexDamping > 0.0) {
+            const double factor = std::max(0.0, 1.0 - vertexDamping * dt);
+            U *= factor;
+        }
+
         if (params_.enableViscosity) viscosity_.apply(drop, dt);
         if (params_.enableCollision) collision_.apply(drop, surface, params_.collisionPushoutEps, params_.adhesionDistance, dt);
 
