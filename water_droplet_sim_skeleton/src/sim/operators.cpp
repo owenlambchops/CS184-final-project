@@ -143,7 +143,6 @@ void CollisionProjector::apply(
         double pushoutEps,
         double adhesionDist,
         double dt) const {
-        double dt) const {
 
     auto& X = drop.positions();
     auto& U = drop.velocities();
@@ -152,9 +151,7 @@ void CollisionProjector::apply(
     for (int i = 0; i < X.rows(); ++i) {
         SurfaceSample s = surface.closestSample(X.row(i).transpose());
         if (s.signedDistance < adhesionDist) {
-        if (s.signedDistance < adhesionDist) {
             // 1) Project penetrated vertex to the closest point on the solid.
-            X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             X.row(i) = (s.position + pushoutEps * s.normal.normalized()).transpose();
             s = surface.closestSample(X.row(i).transpose());
 
