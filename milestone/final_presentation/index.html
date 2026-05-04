@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Droplet Simulation & Rendering</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  /* ── RESET & ROOT ── */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root {
+    --water-deep:         #0a1628;
+    --water-mid:          #0d2b4e;
+    --water-light:        #1a4a7a;
+    --water-bright:       #2d7dd2;
+    --water-pale:         #a8d4f5;
+    --water-foam:         #ddf0ff;
+    --water-glass:        rgba(173, 216, 255, 0.08);
+    --water-border:       rgba(173, 216, 255, 0.18);
+    --water-border-bright:rgba(173, 216, 255, 0.40);
+    --text-primary:       #e8f4ff;
+    --text-secondary:     rgba(200, 230, 255, 0.70);
+    --text-muted:         rgba(150, 200, 240, 0.50);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--water-deep);
+    color: var(--text-primary);
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.8;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ── ANIMATED BACKGROUND ── */
+  canvas#bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* ── PAGE WRAPPER ── */
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 80px 40px 120px;
+  }
+
+  /* ── HERO / HEADER ── */
+  .hero {
+    text-align: center;
+    padding: 60px 0 80px;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45, 125, 210, 0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .drop-icon {
+    display: block;
+    margin: 0 auto 32px;
+    width: 72px;
+    height: 72px;
+  }
+
+  h1 {
+    font-size: clamp(36px, 5vw, 56px);
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    color: var(--water-foam);
+    margin-bottom: 16px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--water-pale);
+  }
+
+  .subtitle {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 48px;
+  }
+
+  .abstract-card {
+    background: var(--water-glass);
+    border: 0.5px solid var(--water-border-bright);
+    border-radius: 2px;
+    padding: 32px 40px;
+    font-style: italic;
+    font-size: 17px;
+    color: var(--text-secondary);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .abstract-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(168, 212, 245, 0.6), transparent);
+  }
+
+  /* ── SECTIONS ── */
+  .section {
+    margin: 72px 0;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--water-bright);
+    margin-bottom: 8px;
+    opacity: 0.8;
+  }
+
+  h2 {
+    font-size: 30px;
+    font-weight: 300;
+    color: var(--water-foam);
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 0.5px solid var(--water-border);
+    position: relative;
+  }
+
+  h2::after {
+    content: '';
+    position: absolute;
+    bottom: -0.5px;
+    left: 0;
+    width: 60px;
+    height: 1px;
+    background: var(--water-bright);
+  }
+
+  h3 {
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--water-pale);
+    margin: 28px 0 10px;
+    letter-spacing: 0.01em;
+  }
+
+  p {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  code {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--water-pale);
+  }
+
+  /* ── SUBSYSTEM GRID ── */
+  .subsystem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1px;
+    border: 0.5px solid var(--water-border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 48px;
+    background: var(--water-border);
+  }
+
+  .subsystem-cell {
+    background: var(--water-deep);
+    padding: 24px 28px;
+    position: relative;
+    transition: background 0.3s;
+  }
+
+  .subsystem-cell:hover {
+    background: rgba(45, 125, 210, 0.12);
+  }
+
+  .cell-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--water-bright);
+    margin-bottom: 8px;
+    letter-spacing: 0.15em;
+  }
+
+  .cell-title {
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--water-foam);
+    margin-bottom: 6px;
+  }
+
+  .cell-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── PHYSICS OPERATOR TAGS ── */
+  .operator-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 16px 0 28px;
+  }
+
+  .operator-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 6px 14px;
+    border: 0.5px solid var(--water-border-bright);
+    border-radius: 1px;
+    color: var(--water-pale);
+    background: rgba(45, 125, 210, 0.08);
+    transition: all 0.25s;
+    cursor: default;
+  }
+
+  .operator-tag:hover {
+    background: rgba(45, 125, 210, 0.22);
+    border-color: var(--water-bright);
+    color: var(--water-foam);
+  }
+
+  /* ── SOLVER PIPELINE ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 20px 0 32px;
+  }
+
+  .pipeline-step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-left: 0.5px solid var(--water-border);
+    border-right: 0.5px solid var(--water-border);
+    border-bottom: 0.5px solid var(--water-border);
+    position: relative;
+    transition: background 0.2s;
+  }
+
+  .pipeline-step:first-child {
+    border-top: 0.5px solid var(--water-border);
+  }
+
+  .pipeline-step::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--water-bright);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .pipeline-step:hover::before {
+    opacity: 1;
+  }
+
+  .pipeline-step:hover {
+    background: rgba(45, 125, 210, 0.07);
+  }
+
+  .step-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--water-bright);
+    min-width: 20px;
+    opacity: 0.7;
+  }
+
+  .step-name {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    background: rgba(10, 22, 40, 0.7);
+    border: 0.5px solid var(--water-border);
+    border-left: 2px solid var(--water-bright);
+    padding: 20px 24px;
+    color: var(--water-pale);
+    border-radius: 0 2px 2px 0;
+    margin: 16px 0 28px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .code-comment { color: var(--text-muted); }
+  .code-kw      { color: #7dd3fc; }
+  .code-val     { color: #86efac; }
+
+  /* ── RENDERING PASSES ── */
+  .render-passes {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .render-pass {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 20px;
+    align-items: start;
+    padding: 18px 24px;
+    background: var(--water-glass);
+    border: 0.5px solid var(--water-border);
+    border-radius: 2px;
+    transition: border-color 0.25s;
+  }
+
+  .render-pass:hover {
+    border-color: var(--water-border-bright);
+  }
+
+  .pass-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--water-bright);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding-top: 2px;
+  }
+
+  .pass-detail {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .pass-fn {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--water-pale);
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* ── SURFACE GRID ── */
+  .surface-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .surface-card {
+    padding: 24px;
+    background: var(--water-glass);
+    border: 0.5px solid var(--water-border);
+    border-radius: 2px;
+  }
+
+  .surface-title {
+    font-size: 15px;
+    color: var(--water-foam);
+    margin-bottom: 12px;
+    font-weight: 400;
+  }
+
+  .surface-detail {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+
+  /* ── UI FEATURES ── */
+  .ui-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .ui-feature {
+    flex: 1;
+    min-width: 150px;
+    padding: 16px 20px;
+    background: var(--water-glass);
+    border: 0.5px solid var(--water-border);
+    border-radius: 2px;
+    transition: border-color 0.25s;
+  }
+
+  .ui-feature:hover {
+    border-color: var(--water-border-bright);
+  }
+
+  .ui-feature-name {
+    font-size: 13px;
+    color: var(--water-pale);
+    margin-bottom: 4px;
+    font-weight: 400;
+  }
+
+  .ui-feature-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── CONTRIBUTORS ── */
+  .contributors {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-top: 28px;
+  }
+
+  .contributor-card {
+    padding: 20px 24px;
+    background: var(--water-glass);
+    border: 0.5px solid var(--water-border);
+    border-radius: 2px;
+    transition: border-color 0.25s;
+  }
+
+  .contributor-card:hover {
+    border-color: var(--water-border-bright);
+  }
+
+  .contributor-name {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--water-foam);
+    margin-bottom: 8px;
+  }
+
+  .contributor-roles {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── REFERENCES ── */
+  .ref-category {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 28px 0 16px;
+    font-weight: 300;
+  }
+
+  .ref-item {
+    padding: 18px 0;
+    border-bottom: 0.5px solid var(--water-border);
+  }
+
+  .ref-item:last-child {
+    border-bottom: none;
+  }
+
+  .ref-title {
+    font-size: 15px;
+    color: var(--water-pale);
+    margin-bottom: 4px;
+  }
+
+  .ref-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: 48px 0;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 0.5px;
+    background: var(--water-border);
+  }
+
+  .divider-drop {
+    width: 8px;
+    height: 8px;
+    background: var(--water-bright);
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    opacity: 0.6;
+    flex-shrink: 0;
+  }
+
+  /* ── FOOTER ── */
+  .watermark {
+    text-align: center;
+    padding-top: 60px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .page          { padding: 40px 20px 80px; }
+    .surface-grid  { grid-template-columns: 1fr; }
+    .render-pass   { grid-template-columns: 1fr; }
+    .abstract-card { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- animated droplet background -->
+<canvas id="bg"></canvas>
+
+<div class="page">
+
+  <!-- ── HERO ── -->
+  <header class="hero">
+
+    
+    <p class="subtitle">CS184 </p>
+    <p class="subtitle">Spring 2026</p>
+    <h1><em>Water Droplet</em><br>Simulation &amp; Rendering</h1>
+    <p class="subtitle" style="margin-top:8px; margin-bottom:40px;">Owen Lam &middot; Kevin Ying&middot; Haoyi Yu &middot; Yoko Furukawa</p>
+
+    <div class="abstract-card">
+      A physically-inspired water droplet simulation framework with interactive manipulation,
+      surface-aware dynamics, droplet merging and splitting, GPU rendering infrastructure,
+      and a real-time UI system — organized into five modular subsystems.
+    </div>
+  </header>
+
+  <!-- ── SYSTEM OVERVIEW ── -->
+  <section class="section">
+    <p class="section-label">Architecture</p>
+    <h2>System Overview</h2>
+
+    <div class="subsystem-grid">
+      <div class="subsystem-cell">
+        <div class="cell-num">01</div>
+        <div class="cell-title">Simulation System</div>
+        <div class="cell-desc">Droplet physics &amp; numerical integration</div>
+      </div>
+      <div class="subsystem-cell">
+        <div class="cell-num">02</div>
+        <div class="cell-title">Surface Representation</div>
+        <div class="cell-desc">Planar &amp; heightfield surfaces</div>
+      </div>
+      <div class="subsystem-cell">
+        <div class="cell-num">03</div>
+        <div class="cell-title">Rendering Pipeline</div>
+        <div class="cell-desc">GPU mesh &amp; refractive rendering</div>
+      </div>
+      <div class="subsystem-cell">
+        <div class="cell-num">04</div>
+        <div class="cell-title">Interaction System</div>
+        <div class="cell-desc">Mouse picking &amp; drag forces</div>
+      </div>
+      <div class="subsystem-cell">
+        <div class="cell-num">05</div>
+        <div class="cell-title">UI Layer</div>
+        <div class="cell-desc">Parameter editing &amp; scene control</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── SIMULATION ── -->
+  <section class="section">
+    <p class="section-label">Technical Approach &mdash; Owen, Kevin</p>
+    <h2>Simulation System</h2>
+
+    <h3>Droplet Representation</h3>
+    <p>
+      The droplet template stores the rest-state mesh topology. Each droplet mesh is generated as a
+      spherical cap using radial rings and angular segments, producing a smooth dome-like shape that
+      approximates a real water droplet. Templates store rest vertices, triangle faces, and boundary
+      loop indices — critical for contact-line physics, volume preservation, and droplet splitting.
+    </p>
+    <p>
+      Each droplet maintains dynamic per-vertex positions and velocities.
+      <code>updateDerived()</code> computes vertex normals, center of mass, and principal deformation
+      axes. Newly spawned droplets are aligned to arbitrary surface orientations via the droplet
+      factory, which transforms template local coordinates into the surface's tangent space.
+    </p>
+
+    <h3>Merging &amp; Splitting</h3>
+    <p>
+      Droplets merge when centers satisfy <code>distance &lt; factor &times; combinedRadius</code>.
+      Total volume is conserved and momentum approximated via volume-weighted averages of centers and
+      velocities. Splitting triggers when volume exceeds a threshold and elongation becomes large —
+      two smaller droplets spawn in opposite directions to mimic capillary breakup.
+    </p>
+
+    <h3>Physics Operators</h3>
+    <p>Modular operators handle distinct fluid behaviors independently:</p>
+    <div class="operator-list">
+      <span class="operator-tag">External Forces</span>
+      <span class="operator-tag">Collision</span>
+      <span class="operator-tag">Viscosity</span>
+      <span class="operator-tag">Surface Tension</span>
+      <span class="operator-tag">Contact Dynamics</span>
+      <span class="operator-tag">Volume Preservation</span>
+    </div>
+    <p>
+      Gravity and user interaction update vertex velocities. The collision operator resolves surface
+      penetration, bouncing, friction, and adhesion. Laplacian-based smoothing simulates viscosity
+      and curvature flow. Contact line dynamics model wetting via advancing and receding contact
+      angles. A final volume correction step rescales interior vertices to maintain stable shape.
+    </p>
+
+    <h3>SingleDropletSolver Pipeline</h3>
+    <p>
+      The solver advances each droplet through a fixed operator sequence using semi-implicit Euler
+      integration with operator splitting:
+    </p>
+    <div class="pipeline">
+      <div class="pipeline-step"><span class="step-num">1</span><span class="step-name">Recompute derived geometry</span></div>
+      <div class="pipeline-step"><span class="step-num">2</span><span class="step-name">Viscosity</span></div>
+      <div class="pipeline-step"><span class="step-num">3</span><span class="step-name">Curvature flow</span></div>
+      <div class="pipeline-step"><span class="step-num">4</span><span class="step-name">Contact angle forces</span></div>
+      <div class="pipeline-step"><span class="step-num">5</span><span class="step-name">External forces</span></div>
+      <div class="pipeline-step"><span class="step-num">6</span><span class="step-name">Integration &mdash; X += dt &times; U</span></div>
+      <div class="pipeline-step"><span class="step-num">7</span><span class="step-name">Collision projection</span></div>
+      <div class="pipeline-step"><span class="step-num">8</span><span class="step-name">Volume correction</span></div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── SURFACE ── -->
+  <section class="section">
+    <p class="section-label">Technical Approach &mdash; Kevin</p>
+    <h2>Surface Representation</h2>
+
+    <div class="surface-grid">
+      <div class="surface-card">
+        <div class="surface-title">Plane Surface</div>
+        <div class="surface-detail">
+          Provides analytical projection, analytical ray intersection, and exact normals.
+        </div>
+        <div class="code-block">t = (origin &minus; ray.origin)
+    .dot(normal) / denom</div>
+      </div>
+
+      <div class="surface-card">
+        <div class="surface-title">Heightfield Surface</div>
+        <div class="surface-detail">
+          Bilinear sampling interpolates heights from grid samples. Gradient-based normals from
+          finite differences. Sphere tracing raycast uses iterative signed-distance stepping.
+        </div>
+        <div class="code-block">normal = (&minus;dh/dx, 1, &minus;dh/dz)
+<span class="code-comment">// sphere trace</span>
+t += abs(dist) &times; 0.5</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── RENDERING ── -->
+  <section class="section">
+    <p class="section-label">Technical Approach &mdash; Haoyi</p>
+    <h2>GPU Rendering Pipeline</h2>
+
+    <h3>GPU Mesh Buffers</h3>
+    <p>
+      <code>GpuMeshBuffer</code> manages VAOs, VBOs, and EBOs. Positions and normals are updated
+      dynamically every frame via <code>GL_DYNAMIC_DRAW</code>. A GPU cache maintains buffers per
+      droplet ID — allocating resources for new droplets and automatically freeing them on removal.
+    </p>
+
+    <h3>Refractive Renderer &mdash; Three-Pass Architecture</h3>
+    <div class="render-passes">
+      <div class="render-pass">
+        <span class="pass-label">Scene Pass</span>
+        <div class="pass-detail">
+          Renders background geometry to establish scene color and depth.
+          <span class="pass-fn">renderSceneColorDepth()</span>
+        </div>
+      </div>
+      <div class="render-pass">
+        <span class="pass-label">G-Buffer Pass</span>
+        <div class="pass-detail">
+          Stores droplet normals, thickness, and depth for deferred compositing.
+          <span class="pass-fn">renderDropletGBuffer()</span>
+        </div>
+      </div>
+      <div class="render-pass">
+        <span class="pass-label">Composite Pass</span>
+        <div class="pass-detail">
+          Combines scene color, refraction vectors, Fresnel reflections, and specular highlights.
+          <span class="pass-fn">compositeDroplets()</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── INTERACTION ── -->
+  <section class="section">
+    <p class="section-label">Technical Approach &mdash; Haoyi, Yoko, Owen</p>
+    <h2>Interaction System</h2>
+    <p>
+      The drag interaction system allows direct droplet manipulation via mouse input.
+      <code>DragInteractor</code> connects user input to the force-field system. On each update it
+      detects mouse release events, generates a picking ray from the camera, and raycasts against
+      the simulation surface. On valid intersection the drag force field activates and follows
+      the cursor-projected world position.
+    </p>
+    <div class="code-block"><span class="code-kw">dragField_</span>->setActive(<span class="code-val">true</span>);
+<span class="code-kw">dragField_</span>->setCenter(hit.position);</div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── UI ── -->
+  <section class="section">
+    <p class="section-label">Technical Approach &mdash; Haoyi, Yoko</p>
+    <h2>UI System</h2>
+    <p>Built using Dear ImGui, the UI exposes simulation and rendering parameters in real time:</p>
+
+    <div class="ui-features">
+      <div class="ui-feature">
+        <div class="ui-feature-name">Droplet Creation</div>
+        <div class="ui-feature-desc">Set spawn coordinates and create droplets interactively</div>
+      </div>
+      <div class="ui-feature">
+        <div class="ui-feature-name">Gravity Editing</div>
+        <div class="ui-feature-desc">Edit gravity vectors live during simulation</div>
+      </div>
+      <div class="ui-feature">
+        <div class="ui-feature-name">Plane Tilt Controls</div>
+        <div class="ui-feature-desc">Pitch and roll &minus;80&deg; to +80&deg; to simulate slanted surfaces</div>
+      </div>
+      <div class="ui-feature">
+        <div class="ui-feature-name">Material Controls</div>
+        <div class="ui-feature-desc">Surface tension, friction, viscous damping, contact angles, volume stiffness</div>
+      </div>
+      <div class="ui-feature">
+        <div class="ui-feature-name">Solver Toggles</div>
+        <div class="ui-feature-desc">Toggle collision, viscosity, curvature flow, contact angle, volume correction</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── REFERENCES ── -->
+  <section class="section">
+    <p class="section-label">References</p>
+    <h2>Source Material</h2>
+
+    <p class="ref-category">Physics &amp; Droplet Dynamics</p>
+
+    <div class="ref-item">
+      <div class="ref-title">Water Drops on Surfaces</div>
+      <div class="ref-meta">Wang, Mucha, Turk &middot; ACM SIGGRAPH 2005 &middot; Viscosity, surface tension, merging</div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-title">Mathematical Model for Simulating Water Droplet Movement on Artificial Leaf Surface</div>
+      <div class="ref-meta">El-Ajou et al. &middot; Frontiers in Physics 7:132 &middot; 2019 &middot; DOI: 10.3389/fphy.2019.00132</div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-title">Multiscale Modeling of Membrane Rearrangement, Drainage, and Rupture in Evolving Foams</div>
+      <div class="ref-meta">Saye &amp; Sethian &middot; Science 340:720–724 &middot; 2013 &middot; DOI: 10.1126/science.1230623</div>
+    </div>
+
+    <p class="ref-category" style="margin-top:32px;">Real-Time Rendering</p>
+
+    <div class="ref-item">
+      <div class="ref-title">A Deformable Surface Model for Real-Time Water Drop Animation</div>
+      <div class="ref-meta">Zhang, Wang, Wang, Tong, Zhou &middot; IEEE TVCG 18(8) &middot; 2012 &middot; DOI: 10.1109/TVCG.2011.141</div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-title">Real-Time Rendering of Soap Bubbles Taking into Account Light Interference</div>
+      <div class="ref-meta">Iwasaki, Matsuzawa, Nishita &middot; CGI 2004 &middot; DOI: 10.1109/CGI.2004.130</div>
+    </div>
+
+    <p class="ref-category" style="margin-top:32px;">ShaderToy References</p>
+    <div class="ref-item">
+      <div class="ref-title">Water Droplets Shader (wlyfWw) &amp; (4ll3R7)</div>
+      <div class="ref-meta">ShaderToy &middot; Visual reference for droplet appearance &amp; refraction effects</div>
+    </div>
+  </section>
+
+  <div class="divider"><div class="divider-drop"></div></div>
+
+  <!-- ── CONTRIBUTORS ── -->
+  <section class="section">
+    <p class="section-label">Team</p>
+    <h2>Contributions</h2>
+
+    <div class="contributors">
+      <div class="contributor-card">
+        <div class="contributor-name">Owen</div>
+        <div class="contributor-roles">Simulation System<br>Interaction System<br>Writeup</div>
+      </div>
+      <div class="contributor-card">
+        <div class="contributor-name">Kevin</div>
+        <div class="contributor-roles">Simulation System<br>Surface Representation<br>Rendering Pipeline &middot; UI Layer</div>
+      </div>
+      <div class="contributor-card">
+        <div class="contributor-name">Haoyi</div>
+        <div class="contributor-roles">Rendering Pipeline<br>Interaction System &middot; UI Layer<br>Surface Representation</div>
+      </div>
+      <div class="contributor-card">
+        <div class="contributor-name">Yoko</div>
+        <div class="contributor-roles">Surface Representation<br>Interaction System<br>UI Layer &middot; Writeup</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="watermark">Water Droplet Simulation &middot; CS184 &middot; Spring 2026</footer>
+
+</div><!-- /.page -->
+
+<!-- ── BACKGROUND ANIMATION ── -->
+<script>
+(function () {
+  const canvas = document.getElementById('bg');
+  const ctx    = canvas.getContext('2d');
+  let W, H, drops = [], time = 0;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function initDrops() {
+    drops = [];
+    for (let i = 0; i < 18; i++) {
+      drops.push({
+        x:       Math.random() * W,
+        y:       Math.random() * H,
+        r:       40 + Math.random() * 120,
+        vx:      (Math.random() - 0.5) * 0.15,
+        vy:      (Math.random() - 0.5) * 0.15,
+        phase:   Math.random() * Math.PI * 2,
+        speed:   0.003 + Math.random() * 0.005,
+        opacity: 0.03  + Math.random() * 0.07,
+      });
+    }
+  }
+
+  function drawDrop(d) {
+    const pulse = Math.sin(time * d.speed + d.phase);
+    const r     = d.r * (1 + 0.06 * pulse);
+
+    const grad = ctx.createRadialGradient(
+      d.x - r * 0.3, d.y - r * 0.3, r * 0.05,
+      d.x, d.y, r
+    );
+    grad.addColorStop(0,   `rgba(168,212,245,${d.opacity * 1.5})`);
+    grad.addColorStop(0.4, `rgba(45,125,210,${d.opacity * 0.8})`);
+    grad.addColorStop(1,   `rgba(10,22,40,0)`);
+
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(168,212,245,${d.opacity * 0.6})`;
+    ctx.lineWidth   = 0.5;
+    ctx.stroke();
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+    time++;
+    drops.forEach(d => {
+      d.x += d.vx;
+      d.y += d.vy;
+      if (d.x < -d.r)  d.x = W + d.r;
+      if (d.x > W + d.r) d.x = -d.r;
+      if (d.y < -d.r)  d.y = H + d.r;
+      if (d.y > H + d.r) d.y = -d.r;
+      drawDrop(d);
+    });
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener('resize', () => { resize(); initDrops(); });
+  resize();
+  initDrops();
+  animate();
+}());
+</script>
+
+</body>
+</html>
