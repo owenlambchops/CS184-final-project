@@ -198,14 +198,30 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
     const auto& X = drop.positions();
     auto& U = drop.velocities();
+    const auto& N = drop.derived().vertexNormals;
     if (X.rows() == 0 || dt <= 0.0) return;
 
     const auto neighbours = buildNeighbours(drop.faces(), X.rows());
     const Weights w = computeCotangentWeights(X, drop.faces());
     const MatX3d lapX = computeLaplacian(X, neighbours, w);
 
+    // Zhang et al. volume-preservation pressure term:
+    // f_vol,i = k_v (V0 - V) n_i,  a_vol,i = f_vol,i / rho.
+    // We apply it in the same acceleration accumulation path as curvature force.
+    const double V0 = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
+    const double V = drop.derived().currentVolume;
+    const double volumeStiffness = 2000.0; // k_v (matches water_sim_basic default scale)
+    const double vp = volumeStiffness * (V0 - V) / std::max(drop.material().density, 1e-8);
+
     const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
     U += scale * lapX;
+    for (int i = 0; i < U.rows(); ++i) {
+        Vec3 ni = N.row(i).transpose();
+        const double nn = ni.norm();
+        if (nn <= 1e-12) continue;
+        ni /= nn;
+        U.row(i) += (vp * dt * ni).transpose();
+    }
 }
 
 // Contact-angle hysteresis operator near the contact line.
@@ -476,7 +492,10 @@ void VolumeCorrector::apply(Droplet& drop, const ISurface& surface, double dt) c
 
     // Global volume correction: d = ΔV / A, then x_i += d n_i.
     if (doGlobal) {
-        const double d = dV / sumArea;
+        double d = dV / sumArea;
+        const double edgeScale = std::max(drop.derived().meanEdgeLength, 1e-8);
+        const double maxStep = 0.25 * edgeScale;
+        d = std::clamp(d, -maxStep, maxStep);
         for (int i = 0; i < n; ++i) {
             Vec3 ni = N.row(i).transpose();
             const double nn = ni.norm();
