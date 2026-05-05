@@ -186,6 +186,57 @@ The renderer is organized as a multi-pass OpenGL pipeline:
   </figure>
 </div>
 
+<div class="image-row">
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/scene_color.png">
+      <source src="./assets/refractive/Scene%20Color.mov" type="video/quicktime">
+    </video>
+    <figcaption>Scene color pass</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/scene_depth.png">
+      <source src="./assets/refractive/Scene%20Depth.mov" type="video/quicktime">
+    </video>
+    <figcaption>Scene depth pass</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/droplet_normal.png">
+      <source src="./assets/refractive/Droplet%20Normal.mov" type="video/quicktime">
+    </video>
+    <figcaption>Droplet normal buffer</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/droplet_depth.png">
+      <source src="./assets/refractive/Droplet%20Depth.mov" type="video/quicktime">
+    </video>
+    <figcaption>Droplet depth buffer</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/thickness.png">
+      <source src="./assets/refractive/Thickness.mov" type="video/quicktime">
+    </video>
+    <figcaption>Thickness reconstruction</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/caustics.png">
+      <source src="./assets/refractive/Cautics.mov" type="video/quicktime">
+    </video>
+    <figcaption>Caustics map</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/wireframe.png">
+      <source src="./assets/refractive/Wireframe.mov" type="video/quicktime">
+    </video>
+    <figcaption>Wireframe debug view</figcaption>
+  </figure>
+  <figure>
+    <video controls muted playsinline preload="metadata" poster="./assets/refractive/final.png">
+      <source src="./assets/refractive/Final.mov" type="video/quicktime">
+    </video>
+    <figcaption>Final composite output</figcaption>
+  </figure>
+</div>
+
 ## Interaction and UI
 
 The interaction system allows users to manipulate droplets directly. `DragInteractor` builds a picking ray from the camera, raycasts against the active surface, and moves a radial drag force field to the cursor-projected world position. When dragging is active, droplets near the cursor receive external force samples from the drag field.

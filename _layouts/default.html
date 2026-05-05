@@ -108,6 +108,31 @@
     figure { text-align: center; margin: 1.5em 0; }
     figcaption { font-size: 0.88em; color: var(--muted); margin-top: 8px; font-style: italic; }
 
+    .image-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+      margin: 18px 0 26px;
+    }
+
+    .image-row figure {
+      flex: 1 1 220px;
+      max-width: 300px;
+      margin: 0;
+    }
+
+    .image-row img,
+    .image-row video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111;
+    }
+
     .page-nav {
       display: flex;
       flex-wrap: wrap;
@@ -320,6 +345,7 @@
       .page-nav { justify-content: stretch; }
       .page-nav a { flex: 1 1 100%; }
       .image-grid td { display: block; width: 100%; }
+      .image-row figure { max-width: 100%; }
     }
   </style>
 
