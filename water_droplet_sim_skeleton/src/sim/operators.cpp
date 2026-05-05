@@ -242,46 +242,87 @@ void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) con
     }
 }
 
-// Contact-angle hysteresis operator near the contact line.
-// Applies restoring force only when contact angle exits [receding, advancing] band.
-// Zhang et al. boundary-force form used here:
-// f_b,i = alpha * (theta_i - theta_r/a) * n_p
+// Contact-angle hysteresis operator (Zhang et al. §4.3).
+//
+// Contact-line vertices: colliding vertices (within adhesionDist) that neighbor
+// at least one non-colliding vertex — the water/air/solid triple junction.
+//
+// n_L is computed from free-surface faces only (faces with at least one
+// non-colliding vertex).  Using all adjacent faces biases n_L toward (0,-1,0)
+// due to the flat contact-patch triangles at y=0, making computed θ appear
+// smaller than the true geometric angle and causing the operator to under-fire.
+//
+// θ < θ_r  → retract (−n_p_dir)   θ > θ_a  → advance (+n_p_dir)
 void ContactLineOperator::apply(Droplet& drop, const ISurface& surface, double dt, double adhesionDist) const {
     auto& U = drop.velocities();
     const auto& X = drop.positions();
-    const auto& N = drop.derived().vertexNormals;
+    const auto& F = drop.faces();
+    const int nVerts = static_cast<int>(X.rows());
 
     const SurfaceMaterialParams& surfaceMaterial = surface.material();
-    const double alpha = surfaceMaterial.contactStiffness;
-    const double receding = surfaceMaterial.recContactAngleDeg * kPi / 180.0;
-    const double advancing = surfaceMaterial.advContactAngleDeg * kPi / 180.0;
+    const double alpha   = surfaceMaterial.contactStiffness;
+    const double theta_r = surfaceMaterial.recContactAngleDeg * kPi / 180.0;
+    const double theta_a = surfaceMaterial.advContactAngleDeg * kPi / 180.0;
     const double density = std::max(drop.material().density, 1e-8);
 
-    if (receding > advancing) return;
+    if (theta_r > theta_a) return;
 
-    for (int i = 0; i < X.rows(); ++i) {
-        SurfaceSample s = surface.closestSample(X.row(i).transpose());
-        if (s.signedDistance > adhesionDist) continue;
+    // Pass 1: classify colliding vertices.
+    std::vector<bool> colliding(nVerts, false);
+    for (int i = 0; i < nVerts; ++i) {
+        const SurfaceSample s = surface.closestSample(X.row(i).transpose());
+        if (s.signedDistance < adhesionDist) colliding[i] = true;
+    }
 
-        Vec3 n_li = N.row(i).transpose();
-        Vec3 n_i = s.normal.normalized();
-        double dotVal = std::clamp(n_li.dot(n_i), -1.0, 1.0);
-        double angle = std::acos(dotVal);
+    // Vertex-to-face map for per-vertex local normal computation.
+    std::vector<std::vector<int>> vertFaces(nVerts);
+    for (int fi = 0; fi < F.rows(); ++fi) {
+        vertFaces[F(fi, 0)].push_back(fi);
+        vertFaces[F(fi, 1)].push_back(fi);
+        vertFaces[F(fi, 2)].push_back(fi);
+    }
 
-        Vec3 n_p = n_li - dotVal * n_i;
-        double n_p_norm = n_p.norm();
-        if (n_p_norm < kEps) continue;
-        Vec3 n_p_dir = n_p / n_p_norm;
+    const auto neighbours = buildNeighbours(F, nVerts);
 
-        if (receding < angle && angle < advancing) continue;
-
-        Vec3 fBoundary = Vec3::Zero();
-        if (angle <= receding) {
-            fBoundary = alpha * (angle - receding) * n_p_dir;
-        } else {
-            fBoundary = alpha * (angle - advancing) * n_p_dir;
+    for (int i = 0; i < nVerts; ++i) {
+        if (!colliding[i]) continue;
+        bool isContactLine = false;
+        for (int nb : neighbours[i]) {
+            if (!colliding[nb]) { isContactLine = true; break; }
         }
+        if (!isContactLine) continue;
 
+        // n_L from free-surface faces only (paper §4.3: faces A,B,C between
+        // water and air, not the flat contact-patch faces).
+        Vec3 n_L = Vec3::Zero();
+        for (int fi : vertFaces[i]) {
+            const int a = F(fi, 0), b = F(fi, 1), c = F(fi, 2);
+            if (colliding[a] && colliding[b] && colliding[c]) continue;
+            n_L += (X.row(b) - X.row(a)).transpose().cross(
+                    (X.row(c) - X.row(a)).transpose());
+        }
+        const double n_L_norm = n_L.norm();
+        if (n_L_norm < kEps) continue;
+        n_L /= n_L_norm;
+
+        const SurfaceSample s = surface.closestSample(X.row(i).transpose());
+        const Vec3 n_i     = s.normal.normalized();
+        const double dotVal = std::clamp(n_L.dot(n_i), -1.0, 1.0);
+        const double theta  = kPi - std::acos(dotVal);
+
+        const Vec3   n_p      = n_L - dotVal * n_i;
+        const double n_p_norm = n_p.norm();
+        if (n_p_norm < kEps) continue;
+        const Vec3 n_p_dir = n_p / n_p_norm;
+
+        if (theta >= theta_r && theta <= theta_a) continue;
+
+        Vec3 fBoundary;
+        if (theta < theta_r) {
+            fBoundary = alpha * (theta - theta_r) * n_p_dir;
+        } else {
+            fBoundary = alpha * (theta - theta_a) * n_p_dir;
+        }
         U.row(i) += ((fBoundary / density) * dt).transpose();
     }
 }

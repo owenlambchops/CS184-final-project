@@ -460,14 +460,52 @@ int main() {
     PlaneGpu planeGpu;
     planeGpu.init(kPlaneHalfSize, kGridSpacing);
 
+    // GPU buffer for oscillating-vertex point overlay (position-only, 3 floats/vert).
+    GLuint oscVao = 0, oscVbo = 0;
+    int    oscPointCount = 0;
+    glGenVertexArrays(1, &oscVao);
+    glGenBuffers(1, &oscVbo);
+    glBindVertexArray(oscVao);
+    glBindBuffer(GL_ARRAY_BUFFER, oscVbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
+    // GPU buffers for contact-line vertex overlay.
+    // clInVao/clInVbo  → yellow: inside hysteresis band, no force applied.
+    // clActVao/clActVbo → orange: outside band, contact-angle force is firing.
+    GLuint clInVao = 0, clInVbo = 0;
+    int    clInCount = 0;
+    glGenVertexArrays(1, &clInVao);
+    glGenBuffers(1, &clInVbo);
+    glBindVertexArray(clInVao);
+    glBindBuffer(GL_ARRAY_BUFFER, clInVbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
+    GLuint clActVao = 0, clActVbo = 0;
+    int    clActCount = 0;
+    glGenVertexArrays(1, &clActVao);
+    glGenBuffers(1, &clActVbo);
+    glBindVertexArray(clActVao);
+    glBindBuffer(GL_ARRAY_BUFFER, clActVbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // ── 6. Runtime state ─────────────────────────────────────────────────────
     OrbitCam cam;
-    bool paused    = false;
-    bool stepOnce  = false;
+    bool paused         = false;
+    bool stepOnce       = false;
+    bool wireframeOnly  = false;  // hide solid fill to see through the mesh
+    bool showOscPoints  = true;   // red dots on reversing vertices
+    bool showContactLine = true;  // yellow/orange dots on contact-zone vertices
+    double clThMin = 0.0, clThMax = 0.0, clThMean = 0.0;
     bool spaceWas  = false;
     bool nWas      = false;
     bool rWas      = false;
@@ -489,6 +527,7 @@ int main() {
     int    diagOscSurface     = 0;   // oscillating verts near the plane (Y < R*0.25)
     int    diagOscBulk        = 0;   // oscillating verts in the bulk
     double diagOscMaxAmp      = 0.0;
+    std::vector<int> diagOscVertIds;  // indices of currently-reversing vertices
     static constexpr double kOscAmpThresh  = 1e-6;  // ignore sub-numerical noise
     static constexpr double kSurfaceYLimit = kDropletRadius * 0.25; // "near surface" threshold
 
@@ -593,11 +632,13 @@ int main() {
                         diagOscSurface = 0;
                         diagOscBulk    = 0;
                         diagOscMaxAmp  = 0.0;
+                        diagOscVertIds.clear();
                         for (int vi = 0; vi < delta.rows(); ++vi) {
                             const double amp = delta.row(vi).norm();
                             if (amp < kOscAmpThresh) continue;
                             if (delta.row(vi).dot(diagPrevDelta.row(vi)) < 0.0) {
                                 ++diagOscCount;
+                                diagOscVertIds.push_back(vi);
                                 diagOscMaxAmp = std::max(diagOscMaxAmp, amp);
                                 if (curPos(vi, 1) < kSurfaceYLimit)
                                     ++diagOscSurface;
@@ -609,6 +650,118 @@ int main() {
                     diagPrevDelta = delta;
                 }
                 diagPrevPos = curPos;
+
+                // Upload oscillating-vertex positions so the render loop can draw red dots.
+                {
+                    const auto& X = scene.droplets().front()->positions();
+                    std::vector<float> pts;
+                    pts.reserve(diagOscVertIds.size() * 3);
+                    for (int vi : diagOscVertIds) {
+                        pts.push_back(static_cast<float>(X(vi, 0)));
+                        pts.push_back(static_cast<float>(X(vi, 1)));
+                        pts.push_back(static_cast<float>(X(vi, 2)));
+                    }
+                    oscPointCount = static_cast<int>(diagOscVertIds.size());
+                    glBindBuffer(GL_ARRAY_BUFFER, oscVbo);
+                    if (!pts.empty()) {
+                        glBufferData(GL_ARRAY_BUFFER,
+                                     static_cast<GLsizeiptr>(pts.size() * sizeof(float)),
+                                     pts.data(), GL_STREAM_DRAW);
+                    }
+                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+                }
+
+                // Upload contact-line vertices (true boundary: colliding + neighbors non-colliding).
+                // n_L computed from free-surface faces only, matching the operator.
+                // yellow = in hysteresis band [theta_r, theta_a], no force
+                // orange = outside band, contact-angle force firing
+                {
+                    const auto& dropRef = *scene.droplets().front();
+                    const auto& X  = dropRef.positions();
+                    const auto& F  = dropRef.faces();
+                    const int   nV = static_cast<int>(X.rows());
+                    const double adhesDist = solverParams.adhesionDistance;
+                    constexpr double kPiD = 3.14159265358979323846;
+                    const double theta_r = scene.surface().material().recContactAngleDeg * (kPiD / 180.0);
+                    const double theta_a = scene.surface().material().advContactAngleDeg * (kPiD / 180.0);
+
+                    // Pass 1: classify colliding vertices.
+                    std::vector<bool> colliding(nV, false);
+                    for (int vi = 0; vi < nV; ++vi) {
+                        const wd::SurfaceSample s = scene.surface().closestSample(X.row(vi).transpose());
+                        if (s.signedDistance < adhesDist) colliding[vi] = true;
+                    }
+
+                    // Vertex-to-face map for local n_L computation.
+                    std::vector<std::vector<int>> vertFaces(nV);
+                    for (int fi = 0; fi < F.rows(); ++fi) {
+                        vertFaces[F(fi, 0)].push_back(fi);
+                        vertFaces[F(fi, 1)].push_back(fi);
+                        vertFaces[F(fi, 2)].push_back(fi);
+                    }
+
+                    const auto neighbours = wd::buildNeighbours(F, nV);
+
+                    std::vector<float> ptsIn, ptsAct;
+                    double thSum = 0.0;
+                    int    thCount = 0;
+                    clThMin = kPiD; clThMax = 0.0;
+
+                    for (int vi = 0; vi < nV; ++vi) {
+                        if (!colliding[vi]) continue;
+                        bool isContactLine = false;
+                        for (int nb : neighbours[vi]) {
+                            if (!colliding[nb]) { isContactLine = true; break; }
+                        }
+                        if (!isContactLine) continue;
+
+                        // n_L from free-surface faces only.
+                        wd::Vec3 n_L = wd::Vec3::Zero();
+                        for (int fi : vertFaces[vi]) {
+                            const int a = F(fi, 0), b = F(fi, 1), c = F(fi, 2);
+                            if (colliding[a] && colliding[b] && colliding[c]) continue;
+                            n_L += (X.row(b) - X.row(a)).transpose().cross(
+                                    (X.row(c) - X.row(a)).transpose());
+                        }
+                        const double n_L_norm = n_L.norm();
+                        if (n_L_norm < 1e-10) continue;
+                        n_L /= n_L_norm;
+
+                        const wd::SurfaceSample s = scene.surface().closestSample(X.row(vi).transpose());
+                        const wd::Vec3 n_i  = s.normal.normalized();
+                        const double dotV   = std::clamp(n_L.dot(n_i), -1.0, 1.0);
+                        const double theta  = kPiD - std::acos(dotV);
+
+                        thSum += theta; ++thCount;
+                        clThMin = std::min(clThMin, theta);
+                        clThMax = std::max(clThMax, theta);
+
+                        const bool inBand = (theta >= theta_r && theta <= theta_a);
+                        auto& pts = inBand ? ptsIn : ptsAct;
+                        pts.push_back(static_cast<float>(X(vi, 0)));
+                        pts.push_back(static_cast<float>(X(vi, 1)));
+                        pts.push_back(static_cast<float>(X(vi, 2)));
+                    }
+
+                    clInCount  = static_cast<int>(ptsIn.size()  / 3);
+                    clActCount = static_cast<int>(ptsAct.size() / 3);
+                    clThMean   = (thCount > 0) ? thSum / thCount : 0.0;
+                    if (thCount == 0) { clThMin = 0.0; }
+
+                    glBindBuffer(GL_ARRAY_BUFFER, clInVbo);
+                    if (!ptsIn.empty())
+                        glBufferData(GL_ARRAY_BUFFER,
+                                     static_cast<GLsizeiptr>(ptsIn.size() * sizeof(float)),
+                                     ptsIn.data(), GL_STREAM_DRAW);
+                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                    glBindBuffer(GL_ARRAY_BUFFER, clActVbo);
+                    if (!ptsAct.empty())
+                        glBufferData(GL_ARRAY_BUFFER,
+                                     static_cast<GLsizeiptr>(ptsAct.size() * sizeof(float)),
+                                     ptsAct.data(), GL_STREAM_DRAW);
+                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+                }
             }
         }
 
@@ -645,6 +798,23 @@ int main() {
         if (ImGui::Button("Step (N)") && paused) stepOnce = true;
         ImGui::SameLine();
         if (ImGui::Button("Reset (R)")) resetSim();
+
+        // View mode
+        ImGui::Separator();
+        ImGui::Checkbox("Wireframe Only", &wireframeOnly);
+        ImGui::SameLine();
+        ImGui::Checkbox("Osc Vertices", &showOscPoints);
+        ImGui::SameLine();
+        ImGui::Checkbox("Contact Line", &showContactLine);
+        ImGui::TextDisabled("red=reversing  yellow=contact(in-band)  orange=contact(force active)");
+        if (clInCount + clActCount > 0) {
+            ImGui::Text("Contact zone: %d verts  (in-band: %d  active: %d)",
+                        clInCount + clActCount, clInCount, clActCount);
+            ImGui::Text("Contact angle theta: min=%.1f  mean=%.1f  max=%.1f deg",
+                        static_cast<float>(clThMin * 180.0 / 3.14159265),
+                        static_cast<float>(clThMean * 180.0 / 3.14159265),
+                        static_cast<float>(clThMax * 180.0 / 3.14159265));
+        }
 
         // Spawn
         ImGui::Separator();
@@ -709,7 +879,7 @@ int main() {
         }
         {
             float cs = static_cast<float>(scene.surface().material().contactStiffness);
-            if (ImGui::SliderFloat("Contact Stiffness", &cs, 0.f, 2.f))
+            if (ImGui::SliderFloat("Contact Stiffness", &cs, 0.f, 2000.f))
                 scene.surface().material().contactStiffness = cs;
         }
         {
@@ -820,22 +990,63 @@ int main() {
         for (const auto& dropPtr : scene.droplets()) {
             meshGpu.upload(*dropPtr);
 
-            // Solid pass — polygon offset pushes faces back so wireframe sits on top.
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            glPolygonOffset(1.f, 1.f);
-            glUseProgram(meshProg);
-            glUniformMatrix4fv(locMeshMVP,   1, GL_FALSE, glm::value_ptr(MVP));
-            glUniformMatrix3fv(locMeshNorm,  1, GL_FALSE, glm::value_ptr(N3));
-            glUniform3fv(locMeshCam,  1, glm::value_ptr(eye));
-            glUniform3f(locMeshColor, 0.28f, 0.58f, 0.92f);
-            meshGpu.drawSolid();
-            glDisable(GL_POLYGON_OFFSET_FILL);
+            if (!wireframeOnly) {
+                // Solid pass — polygon offset pushes faces back so wireframe sits on top.
+                glEnable(GL_POLYGON_OFFSET_FILL);
+                glPolygonOffset(1.f, 1.f);
+                glUseProgram(meshProg);
+                glUniformMatrix4fv(locMeshMVP,   1, GL_FALSE, glm::value_ptr(MVP));
+                glUniformMatrix3fv(locMeshNorm,  1, GL_FALSE, glm::value_ptr(N3));
+                glUniform3fv(locMeshCam,  1, glm::value_ptr(eye));
+                glUniform3f(locMeshColor, 0.28f, 0.58f, 0.92f);
+                meshGpu.drawSolid();
+                glDisable(GL_POLYGON_OFFSET_FILL);
+            }
 
-            // Wireframe overlay
+            // Wireframe edges — bright blue when wireframe-only, dark overlay otherwise.
             glUseProgram(flatProg);
             glUniformMatrix4fv(locFlatMVP, 1, GL_FALSE, glm::value_ptr(MVP));
-            glUniform4f(locFlatColor, 0.05f, 0.05f, 0.10f, 1.f);
+            if (wireframeOnly)
+                glUniform4f(locFlatColor, 0.45f, 0.78f, 1.00f, 1.f);
+            else
+                glUniform4f(locFlatColor, 0.05f, 0.05f, 0.10f, 1.f);
             meshGpu.drawWire();
+        }
+
+        // Oscillating-vertex point overlay: red dots on reversing vertices.
+        // Drawn with depth test so points sort correctly through the mesh.
+        if (showOscPoints && oscPointCount > 0) {
+            glPointSize(7.f);
+            glUseProgram(flatProg);
+            glUniformMatrix4fv(locFlatMVP, 1, GL_FALSE, glm::value_ptr(MVP));
+            glUniform4f(locFlatColor, 1.f, 0.15f, 0.10f, 1.f);
+            glBindVertexArray(oscVao);
+            glDrawArrays(GL_POINTS, 0, oscPointCount);
+            glBindVertexArray(0);
+            glPointSize(1.f);
+        }
+
+        // Contact-line overlays.
+        // Yellow (9px): vertices inside hysteresis band — no force.
+        // Orange (11px): vertices outside band — contact-angle force is firing.
+        if (showContactLine) {
+            glUseProgram(flatProg);
+            glUniformMatrix4fv(locFlatMVP, 1, GL_FALSE, glm::value_ptr(MVP));
+            if (clInCount > 0) {
+                glPointSize(9.f);
+                glUniform4f(locFlatColor, 1.f, 0.90f, 0.10f, 1.f);
+                glBindVertexArray(clInVao);
+                glDrawArrays(GL_POINTS, 0, clInCount);
+                glBindVertexArray(0);
+            }
+            if (clActCount > 0) {
+                glPointSize(11.f);
+                glUniform4f(locFlatColor, 1.f, 0.45f, 0.05f, 1.f);
+                glBindVertexArray(clActVao);
+                glDrawArrays(GL_POINTS, 0, clActCount);
+                glBindVertexArray(0);
+            }
+            glPointSize(1.f);
         }
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -845,6 +1056,12 @@ int main() {
     // ── 8. Cleanup ────────────────────────────────────────────────────────────
     meshGpu.destroy();
     planeGpu.destroy();
+    glDeleteBuffers(1, &oscVbo);
+    glDeleteVertexArrays(1, &oscVao);
+    glDeleteBuffers(1, &clInVbo);
+    glDeleteVertexArrays(1, &clInVao);
+    glDeleteBuffers(1, &clActVbo);
+    glDeleteVertexArrays(1, &clActVao);
     glDeleteProgram(meshProg);
     glDeleteProgram(flatProg);
 

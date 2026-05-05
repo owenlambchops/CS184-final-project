@@ -73,7 +73,7 @@ struct SurfaceMaterialParams {
 
     double advContactAngleDeg = 90.0;
     double recContactAngleDeg = 30.0;
-    double contactStiffness = 0.5;
+    double contactStiffness = 500.0;
 
     // Viscous drag applied to the tangential velocity of vertices in the
     // adhesion zone [0, adhesionDist].  Units: 1/s (exponential decay rate).
