@@ -207,7 +207,7 @@ void App::buildDefaultScene() {
     composite->addField(dragField_);
     scene_.setForceField(composite);
 
-    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(3, 0.20);
+    dropletTemplate_ = DropletTemplate::CreateSphericalMesh(3, 0.0020);
     DropletFactory factory(dropletTemplate_);
     MergeSplitController mergeSplit(factory);
     sim_ = std::make_unique<SimulationSystem>(solverParams_, std::move(mergeSplit));

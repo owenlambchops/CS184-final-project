@@ -213,32 +213,57 @@ void ViscosityOperator::apply(Droplet& drop, double dt) const {
 // a_st,i = f_st,i / rho
 // v_i <- v_i + a_st,i * dt
 // (same discrete form as the working python_sim_dev/water_sim_basic.cpp path)
-void CurvatureFlowOperator::apply(Droplet& drop, const ISurface&, double dt) const {
-    const auto& X = drop.positions();
+void CurvatureFlowOperator::apply(Droplet& drop, const ISurface& surface, double dt) const {
+    const auto& X = drop.positions(); 
     auto& U = drop.velocities();
-    const auto& N = drop.derived().vertexNormals;
     if (X.rows() == 0 || dt <= 0.0) return;
 
     const auto neighbours = buildNeighbours(drop.faces(), X.rows());
     const Weights w = computeCotangentWeights(X, drop.faces());
+    
+    // Calculates the raw cotangent sum (the "L * X" term in the paper)
     const MatX3d lapX = computeLaplacian(X, neighbours, w);
 
-    // Zhang et al. volume-preservation pressure term:
-    // f_vol,i = k_v (V0 - V) n_i,  a_vol,i = f_vol,i / rho.
-    // We apply it in the same acceleration accumulation path as curvature force.
-    const double V0 = (drop.targetVolume() > 0.0) ? drop.targetVolume() : drop.derived().restVolume;
-    const double V = drop.derived().currentVolume;
-    const double volumeStiffness = std::max(0.0, drop.material().volumeStiffness); // k_v
-    const double vp = volumeStiffness * (V0 - V) / std::max(drop.material().density, 1e-8);
+    // Get vertex areas (the "M" lumped mass matrix in Zhang's paper)
+    std::vector<double> lumpedAreas = computeLumpedAreas(drop);
 
-    const double scale = (drop.material().surfaceTension / std::max(drop.material().density, 1e-8)) * dt;
-    U += scale * lapX;
+    // Zhang's geometric coefficient (ignores physical mass/volume entirely)
+    const double gamma = drop.material().surfaceTension;
+
+    MatX3d deltaU = MatX3d::Zero(U.rows(), 3);
+
+    float max_du = 50.0;
+
+    for (int i = 0; i < deltaU.rows(); ++i) {
+        const double norm = deltaU.row(i).norm();
+        if (norm > max_du) {
+            deltaU.row(i) *= (max_du / norm); // Safely caps the force
+        }
+    }
+
+    // Momentum Conservation: remove phantom net forces to stop global drifting
+    const Vec3 net_du = deltaU.colwise().mean().transpose();
+    
     for (int i = 0; i < U.rows(); ++i) {
-        Vec3 ni = N.row(i).transpose();
-        const double nn = ni.norm();
-        if (nn <= 1e-12) continue;
-        ni /= nn;
-        U.row(i) += (vp * dt * ni).transpose();
+        Vec3 du = deltaU.row(i).transpose() - net_du;
+
+        // ---------------------------------------------------------
+        // NEW: Kinematic Adhesion Constraint
+        // ---------------------------------------------------------
+        SurfaceSample s = surface.closestSample(X.row(i).transpose());
+        
+        // Identify vertices resting on the solid (using a fraction of edge length as the band)
+        const double contactBand = drop.derived().meanEdgeLength * 0.25;
+        
+        if (s.signedDistance < contactBand) {
+            Vec3 n = s.normal.normalized();
+            // Project the force onto the tangent plane of the surface.
+            // This destroys the vertical component, meaning surface tension 
+            // can only pull the contact line horizontally (sliding), not vertically.
+            du = du - du.dot(n) * n;
+        }
+
+        U.row(i) += du.transpose();
     }
 }
 

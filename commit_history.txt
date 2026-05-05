@@ -1,0 +1,162 @@
+7b4774e mesh merging working
+6482e60 debugged ui
+68b4dd3 added plane interaction
+556b646 volume corrector contact vetitces fix; drop no longer bursts
+7e6c810 Merge branch 'main' of https://github.com/owenlambchops/CS184-final-project
+189e84b debug and contact line damping
+b65efb5 debugged water
+35cb763 Revert "Merge branch 'yoko-ui-interaction'"
+2866368 merged yoko's UI interaction and debug (laggy)
+53454cb Merge branch 'yoko-ui-interaction'
+796cd76 Merge branch 'notebook-debug-fix'
+3ff5fd0 added shaddows draft
+3029acc more droplet stability fixes
+56d6246 plane tilt working
+074eebe removed stale classes
+d82d8c5 Merge branch 'notebook-debug-fix'
+e3ac241 added velocity damping
+a4b4d25 pretty much working
+7205d39 Rebalance default material params to improve capillary lift
+9f4fe8d Simplify control panel with minimal default layout
+600be75 Remove vertex repulsion path and clean stale solver hooks
+ad32714 Fix contact projection to avoid adhesion-band snapping
+a58b139 Add Zhang volume-pressure term and clamp global volume correction
+39a2a50 Stabilize zero-g droplet by aligning surface-tension path to Zhang baseline
+089a3ff fixed build bugs
+34455d1 fix caustics debug view position
+87b63ea Link params
+62cc24e update document
+b22f9dc add Caustics debug && update UI
+346c154 Render full triangle-edge wireframe in debug wireframe mode
+c306a12 Color wireframe debug edges
+6addcfb Implement wireframe debug view from droplet depth edges
+a78605e Simplify curvature flow to minimal explicit Laplacian update
+9858673 Refactor sim mesh math around shared cgl helpers
+d60040a Throttle notebook rendering to avoid Jupyter cell interrupts
+059cb0a fix caustics debug view position
+b30ca4d Link params
+c9913fa Merge branch 'Renderer-Haoyi'
+7c687a0 Add contact-band edge-length projection pass for mesh redistribution
+f88aaae Render full triangle-edge wireframe in debug wireframe mode
+b248163 Color wireframe debug edges
+1a189c3 Implement wireframe debug view from droplet depth edges
+ffa21f8 Sign tangential neighbor push/pull by local curvature direction
+90a41ec Add tangential inverse-distance neighbor velocity in curvature flow
+bc52f24 Simplify curvature flow to minimal explicit Laplacian update
+2ca915c Stabilize contact-band dynamics and add tangential mesh regularizer
+31f7d99 Add curvature-proportional tangential neighbor spread in curvature flow
+ead371a Document simulation operators and curvature-flow surface tension
+443da62 Add UI button to reset plane and disable interactions
+457c131 Set default gravity to Earth-like downward vector
+297ee71 Make support plane white diffuse with droplet shadows and caustics
+ea1856d added plane tilt
+70d9eaa Wrap cursor at viewport edges and document tilt mapping
+dc37e58 Add cursor-driven plane tilt interactor with smoothing
+f84f709 Merge branch 'kevin-stable-blob'
+e01ae8c Refactor sim geometry kernels to CGL-style math module
+c7cc128 restricted vertex density
+c004b08 efforts to prevent surface bottom vertex collapse
+19bf461 update document
+01f7dc0 add Caustics debug && update UI
+ee4a344 Merge branch 'Renderer-Haoyi'
+e6ebfed adding cautics
+daa6e10 Merge branch 'kevin-new-cpp-integration' of https://github.com/owenlambchops/CS184-final-project into kevin-new-cpp-integration
+38f44c1 applied owen collision logic
+2b7aadc calculate real droplet thickness
+3ce6674 change plane to finite plane
+6e1f818 spawn droplet mid-air
+fee039d Merge remote-tracking branch 'origin/kevin-new-cpp-integration' into integrate-kevin-sim
+4720236 initial commit
+eb101c8 changed to fibb sphere gen
+1c85771 added remesh code
+cc4b22c shader debug visualisation, edge length regulariser
+fb64c24 volume preservation works
+d785b69 still pancakes
+ba0a910 0g test
+d8bb745 semi-working droplet
+8703ccb working sim
+9a2eb9a removed CGL, more implimentation
+e060ff4 minor reformatting
+62b07b3 started refactoring
+7f71308 imported libraries; manual slop
+de4b31c add csv save && screenshot
+11b907a glass plane
+e123f91 add RenderParams
+d09a907 add debug view
+81f3985 add UI
+2dd334f fix reflect view
+b931b61 clean renderer code
+8c2dffd add smooth scroll
+e2977dd add smooth scroll
+565c4f4 add thickness
+814d06b fix HDIR upside down
+7a684fe add camera operation
+14d0870 add HDR background
+699bc77 remove gravity for easy debug
+a6d6b90 add fresnel
+b32a9af add scene pass & droplet pass & composite pass
+eabb44f buggy: replaced cap with polyhedron
+ae86b01 added c++ version
+e3439c2 merged updated python sim
+4d961d0 Merge branch 'latest-droplet-sim-kevin' into haoyi-kevin-debug
+921a783 parameter tuning
+378d6ea add reference
+f1d455e animation
+c5ded15 sim to be verified on faster machine
+c37b7d4 stable resting
+9676d69 slightly alive droplet
+390575f still not work
+04ec75b updated vverlet
+d6d9fff updated responsibilities
+756519e fixed minor format
+d776f97 added web link
+7bb46dd renamed milestone to index
+c32276e Merge branch 'main' of https://github.com/owenlambchops/CS184-final-project
+97abb89 website
+a917bca pushed website
+7025a15  videos adn presentations up
+93a5aff replaced links
+ab97574 reformatted next steps
+8e503ee added slides link
+c4ec8f5 Revise water droplet simulation section in milestone.html
+6c0f61a Update milestone.html Kevin 1
+19d07d6 writeup pretty mych done except for presentation vid andslide link
+221282e milestone doc
+a63abbb Merge branch 'python-sim-kevin' into haoyi-kevin-debug
+d0dd5e4 working
+1ab8545 Merge remote-tracking branch 'origin/python-sim-kevin' into Renderer-Haoyi
+58c333e working hydrophobicity
+a129e11 from ad-hoc to actual implement
+c65c12d run water_sim
+1a0da6a added cube
+9d14b8b flip droplet normal
+e7fecaa Merge branch 'python-sim-kevin' of https://github.com/owenlambchops/CS184-final-project into Renderer-Haoyi
+a7e0183 ad-hoc renderer
+a24bec8 isolated python to folder
+d9aacca ported existing code to c++
+691b7c2 attempted to implement boundary contact angle in python
+8692cc8 finish GpuMeshBuffer
+0b1d1e6 Merge branch 'main' into python-sim-kevin
+d808cba add annotation
+f8335f4 wrap up day
+e9284bb add dependency
+b164086 nice lookin bubble
+ccba9f7 working python sim; contact angle not implemented
+4b95e3c all drafts
+7f06f0e simulator working
+6f15fb1 Merge branch 'main' of https://github.com/owenlambchops/CS184-final-project
+d8825dc code skeleton
+99a3567 switched order
+110f647 course info?
+25fceb2 link colour change
+f1e2256 change website to jekyll
+2be7e3a basic website write-up
+e4f7320 Update README.md
+a47db1f Update README.md
+fdd09d2 Update README.md
+7a0c8d8 Update README.md
+68281cd Update README.md
+30e0bfe Updated README.md
+78c9bd1 created milestone folder
+531b21c created proposal folder
+ff643ca Initial commit
