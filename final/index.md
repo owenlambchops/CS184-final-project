@@ -218,10 +218,10 @@ d = Delta V / A
 
 In our initial solver, we added a volume stiffness factor directly inside curvature flow. This made the droplet artificially stiff and interfered with the geometry that surface tension was supposed to preserve. We fixed the issue by introducing a dedicated `VolumeCorrector`, applying it last, and scaling the Laplacian vertex mass more carefully.
 
-<div class="media-placeholder">
-  <strong>TODO: 0.3m droplet pancake photo</strong>
-  <p>Add the image link for the unstable flattened droplet case discussed in the report.</p>
-</div>
+<figure>
+  <img src="./img:mp4/smooshed_pancake.mp4" alt="Contact angle range [15°, 45°]">
+  <figcaption>Contact angle range [15°, 45°]</figcaption>
+</figure>
 
 We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully.
 
