@@ -333,9 +333,19 @@ In our initial solver, we added a volume stiffness factor directly inside curvat
 
 We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully.
 
-<div class="media-placeholder">
-  <strong>TODO: Mini droplet angle comparison photos</strong>
-  <p>Add image links showing smaller droplets under different contact-angle settings.</p>
+<div class="image-row">
+  <figure>
+    <img src="./contact_angle/contact%20angle%20range%20%5B15,%2045%5D.png" alt="Droplet shape with contact angle range 15 to 45 degrees">
+    <figcaption>Contact angle range [15, 45]</figcaption>
+  </figure>
+  <figure>
+    <img src="./contact_angle/contact%20angle%20range%20%5B75,%20105%5D.png" alt="Droplet shape with contact angle range 75 to 105 degrees">
+    <figcaption>Contact angle range [75, 105]</figcaption>
+  </figure>
+  <figure>
+    <img src="./contact_angle/contact%20angle%20range%20%5B160,%20175%5D.png" alt="Droplet shape with contact angle range 160 to 175 degrees">
+    <figcaption>Contact angle range [160, 175]</figcaption>
+  </figure>
 </div>
 
 To improve stability, we added clamps for velocities and translations and allowed local volume correction to be disabled. The final droplet behavior is stable enough for real-time interaction, although it does not always settle perfectly at equilibrium. Because point-based surface models can retain excess energy, practical damping terms were the most effective solution for this project.
