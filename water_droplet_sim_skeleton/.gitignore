@@ -1,6 +1,7 @@
 build/
 cmake-build-*/
 vcpkg_installed/
+libigl/
 *.o
 *.obj
 *.exe
