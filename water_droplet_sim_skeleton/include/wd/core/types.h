@@ -58,10 +58,10 @@ struct PickHit {
 
 struct MaterialParams {
     // Tuned defaults: allow capillary lift without overdamping lower vertices.
-    double surfaceTension = 2000.0;        // gamma
-    double viscousDamping = 5.0;           // mu
-    double laplacianViscosity = 8.0;       // eta
-    double volumeStiffness = 2000.0;       // k_v
+    double surfaceTension = 6500.0;        // gamma
+    double viscousDamping = 8.0;           // mu
+    double laplacianViscosity = 15.0;      // eta
+    double volumeStiffness = 6500.0;       // k_v
     double density = 1.0;
     bool enableLocalVolumeCorrection = false;
     bool enableGlobalVolumeCorrection = true;
@@ -73,14 +73,14 @@ struct SurfaceMaterialParams {
 
     double advContactAngleDeg = 90.0;
     double recContactAngleDeg = 30.0;
-    double contactStiffness = 0.5;
+    double contactStiffness = 50.0;
 
     // Viscous drag applied to the tangential velocity of vertices in the
     // adhesion zone [0, adhesionDist].  Units: 1/s (exponential decay rate).
     // Damping tapers linearly to zero at adhesionDist so it does not affect
     // vertices that have fully lifted off the surface.
     // Default 0 = disabled (no change to existing behaviour).
-    double contactLineDamping = 0.0;
+    double contactLineDamping = 15.0;
 };
 
 struct SurfaceRenderParams {
@@ -97,13 +97,13 @@ struct SurfaceRenderMesh {
 
 struct SolverParams {
     double dt = 1.0 / 120.0;
-    int substeps = 1;
+    int substeps = 2;
 
     bool enableExternalForce = true;
     bool enableCollision = true;
     bool enableViscosity = true;
     bool enableCurvatureFlow = true;
-    bool enableContactAngle = false;
+    bool enableContactAngle = true;
     bool enableVolumeCorrect = true;
     bool enableVertexRepulsion = false;
     

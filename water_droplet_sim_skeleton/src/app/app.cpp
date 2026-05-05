@@ -203,6 +203,7 @@ void App::initializeGlState() {
 void App::buildDefaultScene() {
     scene_.setSurface(std::make_unique<PlaneSurface>(Vec3::Zero(), Vec3::UnitY()));
     scene_.surface().material().friction = 0.02;
+    scene_.surface().material().contactLineDamping = 15.0;
 
     auto composite = std::make_shared<CompositeForceField>();
     gravityField_ = std::make_shared<ConstantForceField>(gravityLikeForce_);
