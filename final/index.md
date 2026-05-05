@@ -18,7 +18,7 @@ team:
 <div class="link-strip">
   <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">Repository</a>
   <a href="https://docs.google.com/presentation/d/1VsuLc1AqObqEuIxH6--GQmMYpoXd5BPMRN9lEDQG4AM/edit?usp=sharing" target="_blank">Final Presentation</a>
-  <span class="pending-link">TODO: Final Video link</span>
+  <a href="https://drive.google.com/file/d/13uo6rrP5mZ7I9dr6Eewg-8rnYVzrKPFJ/view?usp=drive_link" target="_blank">Final Video</a>
 </div>
 
 ## Abstract
@@ -165,14 +165,69 @@ The renderer is organized as a multi-pass OpenGL pipeline:
 - **Composite pass:** combine scene color, screen-space refraction, Fresnel environment reflection, and thickness absorption.
 - **Wireframe debug pass:** optionally overlay mesh wireframes for solver and topology debugging.
 
-<div class="result-grid">
-  <a class="result-card" href="https://drive.google.com/file/d/1XYDc9Htu7MzThe9ZUyGSn6RmyhGH7loC/view?usp=drive_link" target="_blank">
-    <span>Rendering Result</span>
-    0.2m droplet falling demo
+<div class="render-gallery">
+  <a class="render-card" href="https://drive.google.com/file/d/1CvC11SIBHfAknFvKy9xjTrbiT1FwV8EY/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/caustics.png' | relative_url }}" alt="Caustics render output cover">
+    <div class="render-card-body">
+      <span>Caustic Map</span>
+      <strong>Caustics</strong>
+    </div>
   </a>
-  <a class="result-card" href="https://drive.google.com/file/d/12sl18-27Mm4KWY6oTS1aLBJjiQgbbfDC/view?usp=drive_link" target="_blank">
-    <span>Rendering Result</span>
-    Caustic and refraction demo
+  <a class="render-card" href="https://drive.google.com/file/d/1w-Aik9zMIkhAMyp4cwLxxnV0Y9a0pKzF/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/droplet_depth.png' | relative_url }}" alt="Droplet depth buffer cover">
+    <div class="render-card-body">
+      <span>Droplet Buffer</span>
+      <strong>Droplet Depth</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1Sh-dN5xsbPD_rWdgxdylHHBeut2IvkBW/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/droplet_normal.png' | relative_url }}" alt="Droplet normal buffer cover">
+    <div class="render-card-body">
+      <span>Droplet Buffer</span>
+      <strong>Droplet Normal</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1ECn6pIfrYndvJrvz7d1sPIi75-0eKIwp/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/final.png' | relative_url }}" alt="Final refractive renderer output cover">
+    <div class="render-card-body">
+      <span>Composite</span>
+      <strong>Final</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1wHsI9ntVja8CLxKPFhNUz4FAXE0QJTiW/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/scene_color.png' | relative_url }}" alt="Scene color buffer cover">
+    <div class="render-card-body">
+      <span>Scene Buffer</span>
+      <strong>Scene Color</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1jmHEvQ3FXxXkLphQDi4R9tcyQt3UsA_f/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/scene_depth.png' | relative_url }}" alt="Scene depth buffer cover">
+    <div class="render-card-body">
+      <span>Scene Buffer</span>
+      <strong>Scene Depth</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1L3ayBmNnyazHqolwDqC8jArRsFLjKdIc/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/thickness.png' | relative_url }}" alt="Droplet thickness buffer cover">
+    <div class="render-card-body">
+      <span>Composite Input</span>
+      <strong>Thickness</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/1cmZBOTKpatGR12bCpoUKvLcwxppx72DD/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/wireframe.png' | relative_url }}" alt="Wireframe debug render cover">
+    <div class="render-card-body">
+      <span>Debug View</span>
+      <strong>Wireframe</strong>
+    </div>
+  </a>
+  <a class="render-card" href="https://drive.google.com/file/d/12sl18-27Mm4KWY6oTS1aLBJjiQgbbfDC/view?usp=drive_link" target="_blank">
+    <img src="{{ '/final/assets/refractive/caustics_and_refraction.png' | relative_url }}" alt="Caustic and refraction demo cover">
+    <div class="render-card-body">
+      <span>Rendering Result</span>
+      <strong>Caustic and Refraction Demo</strong>
+    </div>
   </a>
 </div>
 
@@ -193,10 +248,18 @@ The UI is built with Dear ImGui and exposes simulation and rendering parameters 
 
 Our final implementation achieves a real-time interactive droplet simulator with deformable Lagrangian surface dynamics, direct user manipulation, GPU-backed rendering, caustic/refraction effects, and modular controls for debugging and tuning. The project also includes a Python prototyping path used during earlier physics experiments and validation.
 
-<div class="media-placeholder">
-  <strong>TODO: Final Video</strong>
-  <p>Add the final deliverable video link here once it is available.</p>
+<div class="video-frame">
+  <iframe
+    src="https://drive.google.com/file/d/13uo6rrP5mZ7I9dr6Eewg-8rnYVzrKPFJ/preview"
+    title="Final project video"
+    allow="autoplay; encrypted-media"
+    allowfullscreen>
+  </iframe>
 </div>
+
+<p class="media-link">
+  <a href="https://drive.google.com/file/d/13uo6rrP5mZ7I9dr6Eewg-8rnYVzrKPFJ/view?usp=drive_link" target="_blank">Open the final video on Google Drive</a>
+</p>
 
 Key completed features include:
 
@@ -223,7 +286,7 @@ In our initial solver, we added a volume stiffness factor directly inside curvat
   <figcaption>Contact angle range [15°, 45°]</figcaption>
 </figure>
 
-We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully.
+Debugging the $\texttt{ContactLineOperator}$ (based off of Zhang et al. (2012) contact angle hysteresis model), as we found it was having negligible effect due to an undersized force coefficient $\texttt{contactStiffness}$ and an adhesion zone too narrow to capture contact-line vertices. We resolved this by raising $\texttt{contactStiffness}$ and $\texttt{adhesionDistance}$ to more suitable ranges, and adding a damping term $\texttt{contactLineDamping}$ to suppress contact-line oscillation.
 
 <div class="image-row">
   <figure>
@@ -239,6 +302,8 @@ We also found that physical scale matters. With gravity set to -9.81 in meter-se
     <figcaption>Contact angle range [160°, 175°]</figcaption>
   </figure>
 </div>
+
+We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully. With a much smaller radius, we found that the droplet showed a more visible boundary angle, but became more underdamped. By reducing gravity, we were able to allow the surface tension to pull the droplet into its final shape.
 
 To improve stability, we added clamps for velocities and translations and allowed local volume correction to be disabled. The final droplet behavior is stable enough for real-time interaction, although it does not always settle perfectly at equilibrium. Because point-based surface models can retain excess energy, practical damping terms were the most effective solution for this project.
 
