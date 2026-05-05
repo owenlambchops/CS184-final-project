@@ -24,11 +24,12 @@ namespace wd {
 
 namespace {
 
+// Adjusted for macro/small-droplet scale
 constexpr double kMaxCameraDt = 0.1;
-constexpr double kCameraMoveSpeed = 2.0;
-constexpr double kCameraScrollDistance = 0.12;
+constexpr double kCameraMoveSpeed = 0.3;           // Reduced from 2.0 for finer WASD movement
+constexpr double kCameraScrollDistance = 0.02;     // Reduced from 0.12 for precise scrolling
 constexpr double kCameraScrollSmoothingTime = 0.18;
-constexpr double kCameraMouseSensitivity = 0.0025;
+constexpr double kCameraMouseSensitivity = 0.002;  // Slightly reduced for finer rotation
 constexpr const char* kExperimentOutputDir = "experiments";
 
 std::string makeTimestampedRunName() {
@@ -131,7 +132,10 @@ bool App::initializeWindow() {
 
 bool App::initialize() {
     buildDefaultScene();
-    camera_.setPosition(Vec3(2.2, 1.35, 2.2));
+    
+    // Zoomed-in starting position for small (0.2 radius) droplets
+    // Original: (2.2, 1.35, 2.2)
+    camera_.setPosition(Vec3(0.5, 0.3, 0.5));
     camera_.lookAt(Vec3::Zero());
     lastFrameTimeSec_ = glfwGetTime();
 

@@ -876,11 +876,15 @@ void RefractiveRenderer::renderSceneColorDepth(const Scene& scene, const Camera&
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    glClearColor(0.08f, 0.10f, 0.12f, 1.0f);
+    
+    // Change clear color from dark gray to pure white
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const CameraMatrices matrices = buildCameraMatrices(camera, width_, height_);
-    renderEnvironmentBackground(camera);
+    
+    // Comment out the environment rendering
+    // renderEnvironmentBackground(camera);
 
     if (scene.hasSurface()) {
         syncSurfaceMesh(scene.surface());
