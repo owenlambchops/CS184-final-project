@@ -52,41 +52,8 @@ void addEdgeOpposite(std::map<int64_t, Edge>& edges, int v1, int v2, int opposit
     }
 }
 
-} // namespace
-
-std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalMesh(int subdivisions, double radius) {
-    subdivisions = std::clamp(subdivisions, 0, 6);
-
-    MatX3d V(8, 3);
-    auto addBaseVertex = [&](int idx, double x, double y, double z) {
-        const Vec3 v(x, y, z);
-        V.row(idx) = v.normalized().transpose();
-    };
-
-    addBaseVertex(0, -1, -1, -1);
-    addBaseVertex(1, 1, -1, -1);
-    addBaseVertex(2, 1, 1, -1);
-    addBaseVertex(3, -1, 1, -1);
-    addBaseVertex(4, -1, -1, 1);
-    addBaseVertex(5, 1, -1, 1);
-    addBaseVertex(6, 1, 1, 1);
-    addBaseVertex(7, -1, 1, 1);
-
-    const int initialFaceCapacity = 12 * intPow4(subdivisions);
-    MatX3i F(initialFaceCapacity, 3);
-    int faceCount = 0;
-
-    auto addFace = [&](int a, int b, int c) {
-        F.row(faceCount++) << a, b, c;
-    };
-
-    addFace(4, 5, 6); addFace(4, 6, 7);
-    addFace(1, 0, 3); addFace(1, 3, 2);
-    addFace(0, 4, 7); addFace(0, 7, 3);
-    addFace(5, 1, 2); addFace(5, 2, 6);
-    addFace(7, 6, 2); addFace(7, 2, 3);
-    addFace(0, 1, 5); addFace(0, 5, 4);
-
+// Extracted Loop Subdivision logic so multiple shapes can use it
+void applyLoopSubdivision(MatX3d& V, MatX3i& F, int& faceCount, int subdivisions) {
     for (int sub = 0; sub < subdivisions; ++sub) {
         std::map<int64_t, Edge> edges;
         std::vector<std::vector<int>> adj(V.rows());
@@ -161,7 +128,46 @@ std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalMesh(int subdiv
         F = nextF.topRows(nextFaceCount);
         faceCount = nextFaceCount;
     }
+}
 
+} // namespace
+
+std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalMesh(int subdivisions, double radius) {
+    subdivisions = std::clamp(subdivisions, 0, 6);
+
+    MatX3d V(8, 3);
+    auto addBaseVertex = [&](int idx, double x, double y, double z) {
+        const Vec3 v(x, y, z);
+        V.row(idx) = v.normalized().transpose();
+    };
+
+    addBaseVertex(0, -1, -1, -1);
+    addBaseVertex(1, 1, -1, -1);
+    addBaseVertex(2, 1, 1, -1);
+    addBaseVertex(3, -1, 1, -1);
+    addBaseVertex(4, -1, -1, 1);
+    addBaseVertex(5, 1, -1, 1);
+    addBaseVertex(6, 1, 1, 1);
+    addBaseVertex(7, -1, 1, 1);
+
+    const int initialFaceCapacity = 12 * intPow4(subdivisions);
+    MatX3i F(initialFaceCapacity, 3);
+    int faceCount = 0;
+
+    auto addFace = [&](int a, int b, int c) {
+        F.row(faceCount++) << a, b, c;
+    };
+
+    addFace(4, 5, 6); addFace(4, 6, 7);
+    addFace(1, 0, 3); addFace(1, 3, 2);
+    addFace(0, 4, 7); addFace(0, 7, 3);
+    addFace(5, 1, 2); addFace(5, 2, 6);
+    addFace(7, 6, 2); addFace(7, 2, 3);
+    addFace(0, 1, 5); addFace(0, 5, 4);
+
+    applyLoopSubdivision(V, F, faceCount, subdivisions);
+
+    // Project to sphere
     for (int i = 0; i < V.rows(); ++i) {
         V.row(i) = (V.row(i).normalized() * radius);
     }
@@ -171,6 +177,73 @@ std::shared_ptr<DropletTemplate> DropletTemplate::CreateSphericalMesh(int subdiv
     tpl->F_ = F.topRows(faceCount);
     tpl->E_ = buildUniqueEdges(tpl->F_);
     tpl->boundaryLoop_.clear();
+    return tpl;
+}
+
+std::shared_ptr<DropletTemplate> DropletTemplate::CreateRectangularMesh(double width, double height, double depth, int subdivisions) {
+    subdivisions = std::clamp(subdivisions, 0, 6);
+
+    MatX3d V(8, 3);
+    const double w2 = width * 0.5;
+    const double h2 = height * 0.5;
+    const double d2 = depth * 0.5;
+
+    V.row(0) << -w2, -h2, -d2;
+    V.row(1) <<  w2, -h2, -d2;
+    V.row(2) <<  w2,  h2, -d2;
+    V.row(3) << -w2,  h2, -d2;
+    V.row(4) << -w2, -h2,  d2;
+    V.row(5) <<  w2, -h2,  d2;
+    V.row(6) <<  w2,  h2,  d2;
+    V.row(7) << -w2,  h2,  d2;
+
+    MatX3i F(12, 3);
+    F << 4, 5, 6,  4, 6, 7, // Front
+         1, 0, 3,  1, 3, 2, // Back
+         0, 4, 7,  0, 7, 3, // Left
+         5, 1, 2,  5, 2, 6, // Right
+         7, 6, 2,  7, 2, 3, // Top
+         0, 1, 5,  0, 5, 4; // Bottom
+
+    int faceCount = 12;
+
+    for (int sub = 0; sub < subdivisions; ++sub) {
+        std::map<int64_t, int> edgeToNewVertex;
+        MatX3d nextV = V;
+        nextV.conservativeResize(V.rows() + (faceCount * 3) / 2, 3); // Rough estimate
+        int nextVid = V.rows();
+
+        auto getMidpoint = [&](int v1, int v2) {
+            int64_t key = getEdgeKey(v1, v2);
+            if (edgeToNewVertex.find(key) == edgeToNewVertex.end()) {
+                if (nextVid >= nextV.rows()) nextV.conservativeResize(nextV.rows() * 2, 3);
+                nextV.row(nextVid) = (V.row(v1) + V.row(v2)) * 0.5;
+                edgeToNewVertex[key] = nextVid++;
+            }
+            return edgeToNewVertex[key];
+        };
+
+        MatX3i nextF(faceCount * 4, 3);
+        for (int i = 0; i < faceCount; ++i) {
+            int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2);
+            int m01 = getMidpoint(v0, v1);
+            int m12 = getMidpoint(v1, v2);
+            int m20 = getMidpoint(v2, v0);
+
+            nextF.row(i * 4 + 0) << v0, m01, m20;
+            nextF.row(i * 4 + 1) << v1, m12, m01;
+            nextF.row(i * 4 + 2) << v2, m20, m12;
+            nextF.row(i * 4 + 3) << m01, m12, m20;
+        }
+        V = nextV.topRows(nextVid);
+        F = nextF;
+        faceCount = F.rows();
+    }
+
+    auto tpl = std::shared_ptr<DropletTemplate>(new DropletTemplate());
+    tpl->restV_ = V;
+    tpl->F_ = F;
+    tpl->E_ = buildUniqueEdges(tpl->F_);
     return tpl;
 }
 

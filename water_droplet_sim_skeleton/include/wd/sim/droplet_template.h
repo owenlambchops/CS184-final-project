@@ -6,6 +6,7 @@ namespace wd {
 class DropletTemplate {
 public:
     static std::shared_ptr<DropletTemplate> CreateSphericalMesh(int subdivisions, double radius);
+    static std::shared_ptr<DropletTemplate> CreateRectangularMesh(double width, double height, double depth, int subdivisions = 3);
 
     const MatX3d& restVertices() const { return restV_; }
     const MatX3i& faces() const { return F_; }
