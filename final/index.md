@@ -286,12 +286,24 @@ In our initial solver, we added a volume stiffness factor directly inside curvat
   <p>Add the image link for the unstable flattened droplet case discussed in the report.</p>
 </div>
 
-We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully.
+Debugging the $\texttt{ContactLineOperator}$ (based off of Zhang et al. (2012) contact angle hysteresis model), as we found it was having negligible effect due to an undersized force coefficient $\texttt{contactStiffness}$ and an adhesion zone too narrow to capture contact-line vertices. We resolved this by raising $\texttt{contactStiffness}$ and $\texttt{adhesionDistance}$ to more suitable ranges, and adding a damping term $\texttt{contactLineDamping}$ to suppress contact-line oscillation.
 
-<div class="media-placeholder">
-  <strong>TODO: Mini droplet angle comparison photos</strong>
-  <p>Add image links showing smaller droplets under different contact-angle settings.</p>
+<div class="image-row">
+  <figure>
+    <img src="./img:mp4/contact%20angle%20range%20%5B15%2C%2045%5D.png" alt="Contact angle range [15°, 45°]">
+    <figcaption>Contact angle range [15°, 45°]</figcaption>
+  </figure>
+  <figure>
+    <img src="./img:mp4/contact%20angle%20range%20%5B75%2C%20105%5D.png" alt="Contact angle range [75°, 105°]">
+    <figcaption>Contact angle range [75°, 105°]</figcaption>
+  </figure>
+  <figure>
+    <img src="./img:mp4/contact%20angle%20range%20%5B160%2C%20175%5D.png" alt="Contact angle range [160°, 175°]">
+    <figcaption>Contact angle range [160°, 175°]</figcaption>
+  </figure>
 </div>
+
+We also found that physical scale matters. With gravity set to -9.81 in meter-second units, capillary effects become visually dominant only for small droplets, roughly in the millimeter range. At larger radii, gravity can dominate the curvature-flow response and flatten the droplet unless parameters are tuned carefully. With a much smaller radius, we found that the droplet showed a more visible boundary angle, but became more underdamped. By reducing gravity, we were able to allow the surface tension to pull the droplet into its final shape.
 
 To improve stability, we added clamps for velocities and translations and allowed local volume correction to be disabled. The final droplet behavior is stable enough for real-time interaction, although it does not always settle perfectly at equilibrium. Because point-based surface models can retain excess energy, practical damping terms were the most effective solution for this project.
 
