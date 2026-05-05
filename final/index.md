@@ -324,7 +324,7 @@ d = Delta V / A
 
 In our initial solver, we added a volume stiffness factor directly inside curvature flow. This made the droplet artificially stiff and interfered with the geometry that surface tension was supposed to preserve. We fixed the issue by introducing a dedicated `VolumeCorrector`, applying it last, and scaling the Laplacian vertex mass more carefully.
 
-<figure>
+<figure class="compact-media">
   <video controls muted playsinline preload="metadata">
     <source src="./gravity/r_0.2_g_9.81.mp4" type="video/mp4">
   </video>
