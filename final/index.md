@@ -19,7 +19,7 @@ team:
   <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">Repository</a>
   <a href="https://drive.google.com/drive/folders/1wlzLwFn2OWXMHs2RsGyLEGNLKKn_iy8L?usp=sharing" target="_blank">Demo videos and supplementary materials</a>
   <a href="https://docs.google.com/presentation/d/1VsuLc1AqObqEuIxH6--GQmMYpoXd5BPMRN9lEDQG4AM/edit?usp=sharing" target="_blank">Final Presentation</a>
-    <a href="https://drive.google.com/file/d/13uo6rrP5mZ7I9dr6Eewg-8rnYVzrKPFJ/view?usp=share_link" target="_blank">Final Presentation Video</a>
+    <a href="https://drive.google.com/file/d/19OPT6qCcd2WqsbJ5rQdh5FPs0T96aYQ3/view?usp=share_link" target="_blank">Final Presentation Video</a>
 </div>
 
 
