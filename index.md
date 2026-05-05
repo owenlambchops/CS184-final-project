@@ -13,6 +13,12 @@ team:
 
 **Website:** [https://owenlambchops.github.io/CS184-final-project/](https://owenlambchops.github.io/CS184-final-project/){:target="_blank"}
 
+<nav class="page-nav" aria-label="Project pages">
+  <a href="{{ '/' | relative_url }}" aria-current="page">Proposal</a>
+  <a href="{{ '/milestone/' | relative_url }}">Milestone</a>
+  <a href="{{ '/final/' | relative_url }}">Final Report</a>
+</nav>
+
 ## Project Summary
 
 We plan to build a real-time interactive water droplet simulator that simulates droplet movement on a vertical glass surface without gravity as the baseline. The system emphasizes realistic visual appearance through real-time refractive shading. Aspirational extensions include physically accurate merging/splitting, caustics, customizable fluid properties like viscosity and friction, and support for more complex surfaces than a flat plane.
