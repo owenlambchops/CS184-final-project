@@ -17,9 +17,11 @@ team:
 
 <div class="link-strip">
   <a href="https://github.com/owenlambchops/CS184-final-project" target="_blank">Repository</a>
+  <a href="https://drive.google.com/drive/folders/1wlzLwFn2OWXMHs2RsGyLEGNLKKn_iy8L?usp=sharing" target="_blank">Demo videos and supplementary materials</a>
   <a href="https://docs.google.com/presentation/d/1VsuLc1AqObqEuIxH6--GQmMYpoXd5BPMRN9lEDQG4AM/edit?usp=sharing" target="_blank">Final Presentation</a>
-  <span class="pending-link">TODO: Final Video link</span>
+    <a href="https://drive.google.com/file/d/13uo6rrP5mZ7I9dr6Eewg-8rnYVzrKPFJ/view?usp=share_link" target="_blank">Final Presentation Video</a>
 </div>
+
 
 ## Abstract
 
@@ -208,13 +210,13 @@ In zero-gravity tests, we observe that curvature-flow-based surface tension domi
 <div class="image-row">
   <figure>
     <video controls muted playsinline preload="metadata">
-      <source src="./img:mp4/cube_zero_g/cube_0g.mp4" type="video/mp4">
+      <source src="./cube_zero_g/cube_0g.mp4" type="video/mp4">
     </video>
     <figcaption>Zero gravity (`g = 0`) droplet behavior</figcaption>
   </figure>
   <figure>
     <video controls muted playsinline preload="metadata">
-      <source src="./img:mp4/cube_zero_g/cube_0g_mesh.mp4" type="video/mp4">
+      <source src="./cube_zero_g/cube_0g_mesh.mp4" type="video/mp4">
     </video>
     <figcaption>Zero gravity mesh evolution</figcaption>
   </figure>
@@ -273,7 +275,7 @@ In our initial solver, we added a volume stiffness factor directly inside curvat
 
 <figure>
   <video controls muted playsinline preload="metadata">
-    <source src="./img:mp4/smooshed_pancake.mp4" type="video/mp4">
+    <source src="./gravity/r_0.2_g_9.81.mp4" type="video/mp4">
   </video>
   <figcaption>Droplet spreading behavior under strong gravity</figcaption>
 </figure>
