@@ -96,6 +96,9 @@ bool extractBrightestEnvironmentDirection(const float* pixels, int width, int he
 
     const double u = (static_cast<double>(bestX) + 0.5) / static_cast<double>(width);
     const double v = (static_cast<double>(bestY) + 0.5) / static_cast<double>(height);
+    // Assume quiarectangular mapping
+    // u: [0, 1] -> [-pi, pi]
+    // v: [0, 1] -> [-pi/2, pi/2]
     const double phi = (u - 0.5) * 2.0 * std::numbers::pi;
     const double theta = (v - 0.5) * std::numbers::pi;
     const double cosTheta = std::cos(theta);
@@ -108,6 +111,7 @@ bool extractBrightestEnvironmentDirection(const float* pixels, int width, int he
     return true;
 }
 
+// build an orthographic camera for light-space (since sunlight is parallel and orthographic)
 CausticFrame buildCausticFrame(const PlaneSurface& surface, const Vec3& sunDir) {
     CausticFrame frame;
     const glm::vec3 sun = safeNormalize(toGlm(sunDir));
@@ -164,9 +168,14 @@ void configureColorTexture(unsigned int texture,
                            unsigned int format,
                            unsigned int type) {
     glBindTexture(GL_TEXTURE_2D, texture);
+    // Allocate GPU storage for a 2D texture.
+    // The last argument is nullptr because this texture will be written by an FBO,
+    // so no initial CPU-side pixel data is uploaded here.
     glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
+    // Use linear filtering when the texture is sampled at smaller screen size.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Clamp UVs outside [0, 1] to the edge texel to avoid wrapping artifacts.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -283,7 +292,8 @@ RenderStats RefractiveRenderer::render(const Scene& scene, const Camera& camera,
 bool RefractiveRenderer::initializeBasicResources() {
     releaseResources();
 
-    if (!supportSurfaceShader_.load("assets/shaders/support_surface.vert", "assets/shaders/support_surface.frag")) {
+    if (!supportSurfaceShader_.load("assets/shaders/support_surface.vert", 
+                                    "assets/shaders/support_surface.frag")) {
         return false;
     }
 
@@ -699,6 +709,7 @@ void RefractiveRenderer::renderEnvironmentBackground(const Camera& camera) {
 }
 
 void RefractiveRenderer::renderLightDropletBuffers(const Scene& scene) {
+    // Light Space Droplet Normal && Depth && Back Depth
     lightDropletBuffersValid_ = false;
     if (lightDropletFbo_ == 0 || lightDropletBackDepthFbo_ == 0) return;
 

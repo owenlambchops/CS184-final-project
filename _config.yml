@@ -6,3 +6,6 @@ markdown: kramdown
 kramdown:
   input: GFM
   math_engine: null
+
+exclude:
+  - vcpkg

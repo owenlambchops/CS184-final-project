@@ -416,7 +416,7 @@ int main() {
     wd::Scene scene;
     scene.setSurface(std::make_unique<wd::PlaneSurface>(wd::Vec3::Zero(), wd::Vec3::UnitY()));
     scene.surface().material().friction           = kSurfaceFriction;
-    scene.surface().material().contactLineDamping = 5.0;
+    scene.surface().material().contactLineDamping = 15.0;
 
     // Force field: gravity only (no drag in debug mode).
     // To adjust gravity at runtime use the ImGui "Gravity" slider.
@@ -709,7 +709,7 @@ int main() {
         }
         {
             float cs = static_cast<float>(scene.surface().material().contactStiffness);
-            if (ImGui::SliderFloat("Contact Stiffness", &cs, 0.f, 2.f))
+            if (ImGui::SliderFloat("Contact Stiffness", &cs, 0.f, 60.f))
                 scene.surface().material().contactStiffness = cs;
         }
         {
